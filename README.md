@@ -10,13 +10,7 @@ Living Faith Church **Communications Portal** — a React app for soul-winning c
 - **Schedule** — daily / weekly / monthly reminders with lead times
 - **Users** — admin access control for authorized team members
 
-## Demo login
 
-| Field | Value |
-|-------|-------|
-| Email | `admin@fellowship.church` |
-| Password | `admin123` |
-| MFA | `847291` |
 
 ## Stack
 
