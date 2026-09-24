@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import type { Contact, AuthUser, MessageLog, WhatsAppStatus } from '../../types';
 import { store } from '../../lib/store';
-import { checkWhatsApp, validateE164, toE164, sendMessage } from '../../lib/mockApi';
+import { checkWhatsApp, sendMessage } from '../../lib/mockApi';
+import { parsePhone } from '../../lib/phone';
 import { useToast } from '../ui/Toast';
+import PhoneInput from '../ui/PhoneInput';
 
 interface Props {
   user: AuthUser;
@@ -33,6 +35,7 @@ function EditModal({ contact, contacts, onSave, onClose, onCheckWa, checking }: 
   const [form, setForm] = useState({
     name: contact.name,
     phone: contact.phone,
+    phoneValid: true as boolean,
     tags: [...contact.tags],
     notes: contact.notes,
   });
@@ -44,11 +47,14 @@ function EditModal({ contact, contacts, onSave, onClose, onCheckWa, checking }: 
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    const e164 = toE164(form.phone);
-    if (!validateE164(e164)) { setError('Enter a valid phone number.'); return; }
-    const duplicate = contacts.find((c) => c.phone === e164 && c.id !== contact.id);
+    const parsed = parsePhone(form.phone);
+    if (!parsed.valid || !parsed.e164) {
+      setError(parsed.error ?? 'Enter a valid phone number.');
+      return;
+    }
+    const duplicate = contacts.find((c) => c.phone === parsed.e164 && c.id !== contact.id);
     if (duplicate) { setError('Another contact already uses this number.'); return; }
-    onSave({ ...contact, name: form.name.trim(), phone: e164, tags: form.tags, notes: form.notes.trim() });
+    onSave({ ...contact, name: form.name.trim(), phone: parsed.e164, tags: form.tags, notes: form.notes.trim() });
   }
 
   const isChecking = checking === contact.id || contact.whatsappStatus === 'checking';
@@ -87,8 +93,13 @@ function EditModal({ contact, contacts, onSave, onClose, onCheckWa, checking }: 
             </div>
             <div>
               <label className="label">Phone Number *</label>
-              <input required className="input mono" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="+2348031234567 or 08031234567" />
-              <p style={{ fontSize: '11.5px', color: 'var(--text-3)', marginTop: '3px' }}>Auto-formatted to international E.164 format</p>
+              <PhoneInput
+                value={form.phone}
+                onChange={(e164, meta) => {
+                  setForm((f) => ({ ...f, phone: e164, phoneValid: meta.valid }));
+                  if (meta.valid) setError('');
+                }}
+              />
             </div>
             <div>
               <label className="label">Tags</label>
@@ -219,7 +230,7 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Contact | null>(null);
   const [sendTarget, setSendTarget] = useState<Contact | null>(null);
-  const [addForm, setAddForm] = useState({ name: '', phone: '', tags: [] as string[], notes: '' });
+  const [addForm, setAddForm] = useState({ name: '', phone: '', phoneValid: false, tags: [] as string[], notes: '' });
   const [addError, setAddError] = useState('');
   const [saving, setSaving] = useState(false);
   const [checking, setChecking] = useState<string | null>(null);
@@ -249,15 +260,21 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     setAddError('');
-    const e164 = toE164(addForm.phone);
-    if (!validateE164(e164)) { setAddError('Enter a valid phone number (e.g. +2348031234567 or 08031234567).'); return; }
-    if (contacts.some((c) => c.phone === e164)) { setAddError('This number already exists in your contacts.'); return; }
+    const parsed = parsePhone(addForm.phone);
+    if (!parsed.valid || !parsed.e164) {
+      setAddError(parsed.error ?? 'Enter a valid international phone number.');
+      return;
+    }
+    if (contacts.some((c) => c.phone === parsed.e164)) {
+      setAddError('This number already exists in your contacts.');
+      return;
+    }
     setSaving(true);
     await new Promise((r) => setTimeout(r, 300));
     const c: Contact = {
       id: 'c' + Date.now(),
       name: addForm.name.trim(),
-      phone: e164,
+      phone: parsed.e164,
       whatsappStatus: 'unknown',
       addedBy: user.id,
       addedAt: new Date().toISOString(),
@@ -267,10 +284,10 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
     const updated = [c, ...contacts];
     store.saveContacts(updated);
     onContactsChange(updated);
-    setAddForm({ name: '', phone: '', tags: [], notes: '' });
+    setAddForm({ name: '', phone: '', phoneValid: false, tags: [], notes: '' });
     setAddOpen(false);
     setSaving(false);
-    toast('success', 'Contact added', `${c.name} saved.`);
+    toast('success', 'Contact added', `${c.name} saved. Use Edit → Check WhatsApp to verify.`);
   }
 
   async function handleCheckWa(contact: Contact) {
@@ -345,7 +362,7 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
                 ↻ Verify {unverified.length}
               </button>
             )}
-            <button className="btn btn-primary" onClick={() => setAddOpen(true)}>+ Add contact</button>
+            <button className="btn btn-primary" onClick={() => { setAddForm({ name: '', phone: '', phoneValid: false, tags: [], notes: '' }); setAddError(''); setAddOpen(true); }}>+ Add contact</button>
           </div>
         </div>
 
@@ -509,10 +526,13 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
                 </div>
                 <div>
                   <label className="label">Phone number *</label>
-                  <input required className="input mono" value={addForm.phone}
-                    onChange={(e) => setAddForm((f) => ({ ...f, phone: e.target.value }))}
-                    placeholder="+2348031234567 or 08031234567" />
-                  <p style={{ fontSize: '11.5px', color: 'var(--text-3)', marginTop: '3px' }}>Auto-formatted to E.164 international format</p>
+                  <PhoneInput
+                    value={addForm.phone}
+                    onChange={(e164, meta) => {
+                      setAddForm((f) => ({ ...f, phone: e164, phoneValid: meta.valid }));
+                      if (meta.valid) setAddError('');
+                    }}
+                  />
                 </div>
                 <div>
                   <label className="label">Tags</label>

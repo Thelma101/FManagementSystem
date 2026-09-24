@@ -1,24 +1,12 @@
 import type { AuthUser, Contact, MessageLog, ScheduledEvent, WhatsAppStatus } from '../types';
 import { store } from './store';
 
+// Re-export phone helpers (libphonenumber — all country codes + length rules)
+export { validateE164, toE164, parsePhone } from './phone';
+export type { CountryCode, PhoneParseResult } from './phone';
+
 function delay(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
-}
-
-// ── Phone helpers ─────────────────────────────────────────────────────────────
-
-/** Simulates E.164 validation */
-export function validateE164(phone: string): boolean {
-  return /^\+[1-9]\d{6,14}$/.test(phone.replace(/\s/g, ''));
-}
-
-/** Formats a raw number to E.164 (Nigerian prefix default if no country code) */
-export function toE164(raw: string): string {
-  const digits = raw.replace(/\D/g, '');
-  if (raw.trim().startsWith('+')) return '+' + digits;
-  if (digits.startsWith('0') && digits.length === 11) return '+234' + digits.slice(1);
-  if (digits.length === 10) return '+234' + digits;
-  return '+' + digits;
 }
 
 // ── Auth API ──────────────────────────────────────────────────────────────────
@@ -61,8 +49,17 @@ export function logout(): void {
 }
 
 // ── WhatsApp status check ─────────────────────────────────────────────────────
-
-/** Mock WhatsApp status check — uses last digit parity for deterministic demo */
+/**
+ * DEMO ONLY — does not call a real provider.
+ *
+ * In production, wire this to a WhatsApp existence API such as:
+ *   - Meta WhatsApp Cloud API (official messaging; contacts check via partners)
+ *   - 2Chat  — GET /open/whatsapp/check-number
+ *   - WA Lookup — POST /api/v1/check (service_type: "ws")
+ *   - WAWP / Sendexa / ZelNum — third-party number-exists lookups
+ *
+ * Mock rule: even last digit → active, odd → inactive.
+ */
 export async function checkWhatsApp(phone: string): Promise<WhatsAppStatus> {
   await delay(1000 + Math.random() * 900);
   const last = parseInt(phone.replace(/\D/g, '').slice(-1), 10);
