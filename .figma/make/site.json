@@ -1,0 +1,10 @@
+{
+  "description": "Secure portal enabling authorized users to manage contacts and automate SMS and WhatsApp notifications for church events and follow-ups.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
