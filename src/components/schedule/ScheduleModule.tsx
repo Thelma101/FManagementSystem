@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ScheduledEvent, AuthUser, DayOfWeek } from '../../types';
 import { store } from '../../lib/store';
+import { canManageSchedules } from '../../lib/permissions';
 import { useToast } from '../ui/Toast';
 
 interface Props {
@@ -278,7 +279,7 @@ export default function ScheduleModule({ user, events, onEventsChange }: Props) 
                       >
                         {ev.active ? 'Pause' : 'Resume'}
                       </button>
-                      {user.role === 'admin' && (
+                      {canManageSchedules(user) && (
                         <button className="btn btn-danger btn-sm" onClick={() => deleteEvent(ev.id)}>Delete</button>
                       )}
                     </div>

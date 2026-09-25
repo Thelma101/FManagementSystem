@@ -398,6 +398,78 @@ select.input {
   background: var(--surface-2);
 }
 
+/* Tall modal: header and footer stay put, body scrolls */
+.modal-tall { display: flex; flex-direction: column; max-height: 92vh; }
+.modal-tall > form { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.modal-tall .modal-body { overflow-y: auto; }
+
+/* ── Form sections ───────────────────────────────────────────────────────── */
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.form-section:first-child { padding-top: 0; border-top: none; }
+.form-section-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 0.98rem;
+  font-weight: 500;
+  color: var(--navy);
+}
+.form-section-hint { font-size: 12px; color: var(--text-3); margin-top: -8px; }
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* Segmented Yes / No control */
+.seg { display: inline-flex; border: 1.5px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.seg button {
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: 'Inter', sans-serif;
+  background: var(--surface);
+  color: var(--text-3);
+  border: none;
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+}
+.seg button + button { border-left: 1.5px solid var(--border); }
+.seg button.on { background: var(--navy-light); color: var(--navy); font-weight: 600; }
+.seg button:hover:not(.on) { background: var(--surface-2); }
+
+.field-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.field-row > span { font-size: 13.5px; color: var(--text-2); font-weight: 500; }
+
+.alert {
+  font-size: 13px;
+  border-radius: var(--radius);
+  padding: 11px 14px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  line-height: 1.5;
+}
+.alert-amber { background: var(--amber-bg); border: 1px solid var(--amber-border); color: #7C3F06; }
+.alert-red   { background: var(--red-bg);   border: 1px solid var(--red-border);   color: var(--red); }
+.alert-navy  { background: var(--navy-xlight); border: 1px solid #BFCFE9; color: var(--navy); }
+
+/* Attendance grid checkbox cell */
+.att-cell { text-align: center; }
+.att-check {
+  width: 26px; height: 26px;
+  border-radius: 7px;
+  border: 1.5px solid var(--border-2);
+  background: var(--surface);
+  cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff;
+  transition: background 0.12s, border-color 0.12s;
+}
+.att-check:hover:not(:disabled) { border-color: var(--navy); }
+.att-check.on { background: var(--green); border-color: var(--green); }
+.att-check:disabled { opacity: 0.35; cursor: not-allowed; }
+
 /* ── Divider ─────────────────────────────────────────────────────────────── */
 hr.divider { border: none; border-top: 1px solid var(--border); }
 
@@ -594,6 +666,7 @@ hr.divider { border: none; border-top: 1px solid var(--border); }
     box-shadow: 4px 0 32px rgba(10,22,40,0.3);
   }
   .sidebar-drawer.open { transform: translateX(0); }
+  .sidebar-drawer aside { width: 100% !important; }
 
   /* Collapse stat grid to 2 cols on mobile */
   .grid-stats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
@@ -630,6 +703,9 @@ hr.divider { border: none; border-top: 1px solid var(--border); }
 
   /* Compose layout stack */
   .compose-preview { display: none; }
+
+  .grid-2 { grid-template-columns: 1fr; }
+  .modal-tall { max-height: 94vh; }
 
   /* Hide sidebar desktop chrome */
   .sidebar-desktop { display: none; }

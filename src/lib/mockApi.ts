@@ -48,24 +48,8 @@ export function logout(): void {
   store.setCurrentUser(null);
 }
 
-// ── WhatsApp status check ─────────────────────────────────────────────────────
-/**
- * DEMO ONLY — does not call a real provider.
- *
- * In production, wire this to a WhatsApp existence API such as:
- *   - Meta WhatsApp Cloud API (official messaging; contacts check via partners)
- *   - 2Chat  — GET /open/whatsapp/check-number
- *   - WA Lookup — POST /api/v1/check (service_type: "ws")
- *   - WAWP / Sendexa / ZelNum — third-party number-exists lookups
- *
- * Mock rule: even last digit → active, odd → inactive.
- */
-export async function checkWhatsApp(phone: string): Promise<WhatsAppStatus> {
-  await delay(1000 + Math.random() * 900);
-  const last = parseInt(phone.replace(/\D/g, '').slice(-1), 10);
-  if (isNaN(last)) return 'error';
-  return last % 2 === 0 ? 'active' : 'inactive';
-}
+// WhatsApp registration checks live in ./whatsapp.ts (real provider via /api, demo fallback).
+export { checkWhatsApp } from './whatsapp';
 
 // ── Messaging API ─────────────────────────────────────────────────────────────
 

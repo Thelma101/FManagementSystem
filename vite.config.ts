@@ -1,15 +1,18 @@
-import { defineConfig, type HtmlTagDescriptor, type Plugin } from 'vite'
+import { defineConfig, loadEnv, type Connect, type HtmlTagDescriptor, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
 
 import siteConfiguration from './.figma/make/site.json'
+import { handleWhatsAppCheck, waConfigStatus, type WaEnv } from './server/whatsappCheck'
 
 
 // Vite config — https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // .figma/make/deploy-preview passes `--mode development` for cached-preview builds.
   const emitSourcemaps = mode === 'development'
+  // Empty prefix loads non-VITE_ vars too; they stay on the server and are never bundled.
+  const serverEnv = { ...loadEnv(mode, process.cwd(), ''), ...process.env } as WaEnv
 
   return {
     base: process.env.FIGMA_PUBLIC_URL ? `${process.env.FIGMA_PUBLIC_URL}/` : '/',
@@ -24,6 +27,7 @@ react(),
       figmaErrorOverlayReplay(),
       figmaReactRefreshBoundaryFallback(),
       figmaMakeKitPlugin({ storiesGlob: '/src/**/*.stories.{ts,tsx,js,jsx}' }),
+      whatsappCheckApi(serverEnv),
     ],
     resolve: {
       alias: {
@@ -46,6 +50,50 @@ react(),
     },
   }
 })
+
+/** Serves /api/whatsapp/check during `vite dev` and `vite preview`. */
+function whatsappCheckApi(env: WaEnv): Plugin {
+  const ROUTE = '/api/whatsapp/check'
+
+  const middleware: Connect.NextHandleFunction = (req, res, next) => {
+    if (req.url?.split('?')[0] !== ROUTE) return next()
+
+    const send = (status: number, body: unknown) => {
+      res.statusCode = status
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify(body))
+    }
+
+    if (req.method === 'GET') {
+      const cfg = waConfigStatus(env)
+      return send(200, { configured: cfg.configured, provider: cfg.provider })
+    }
+    if (req.method !== 'POST') return send(405, { error: 'Method not allowed' })
+
+    let raw = ''
+    req.on('data', (chunk) => { raw += chunk })
+    req.on('end', async () => {
+      let phone: unknown
+      try {
+        phone = (JSON.parse(raw || '{}') as { phone?: unknown }).phone
+      } catch {
+        return send(400, { configured: true, error: 'Invalid JSON body' })
+      }
+      const result = await handleWhatsAppCheck(phone, env)
+      send(result.status, result.body)
+    })
+  }
+
+  return {
+    name: 'whatsapp-check-api',
+    configureServer(server) {
+      server.middlewares.use(middleware)
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(middleware)
+    },
+  }
+}
 
 type FigmaSiteConfiguration = {
   title?: string

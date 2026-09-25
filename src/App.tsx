@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react';
 import type { AuthUser, Contact, MessageLog, ScheduledEvent, Tab } from './types';
 import { store } from './lib/store';
 import { logout } from './lib/mockApi';
+import { canManageUsers } from './lib/permissions';
 import { ToastProvider } from './components/ui/Toast';
 import LoginScreen from './components/auth/LoginScreen';
-import Sidebar from './components/layout/Sidebar';
+import Sidebar, { NAV_ITEMS } from './components/layout/Sidebar';
 import Dashboard from './components/dashboard/Dashboard';
 import ContactsModule from './components/contacts/ContactsModule';
 import MessagingModule from './components/messaging/MessagingModule';
+import AttendanceModule from './components/attendance/AttendanceModule';
+import ReportsModule from './components/reports/ReportsModule';
 import ScheduleModule from './components/schedule/ScheduleModule';
 import UsersModule from './components/users/UsersModule';
 
@@ -30,13 +33,7 @@ function NavIcon({ d }: { d: string }) {
   );
 }
 
-const NAV_ITEMS: { id: Tab; label: string; icon: string; adminOnly?: boolean }[] = [
-  { id: 'dashboard', label: 'Home',     icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z' },
-  { id: 'contacts',  label: 'Contacts', icon: 'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75' },
-  { id: 'messaging', label: 'Messages', icon: 'M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z' },
-  { id: 'schedule',  label: 'Schedule', icon: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01' },
-  { id: 'users',     label: 'Users',    icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z', adminOnly: true },
-];
+const MOBILE_TABS: Tab[] = ['dashboard', 'contacts', 'attendance', 'messaging'];
 
 function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void }) {
   const [tab, setTab]         = useState<Tab>('dashboard');
@@ -64,7 +61,7 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
     schedules: events.filter((e) => e.active).length,
   };
 
-  const visibleNav = NAV_ITEMS.filter((n) => !n.adminOnly || user.role === 'admin');
+  const mobileNav = NAV_ITEMS.filter((n) => MOBILE_TABS.includes(n.id));
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)', position: 'relative' }}>
@@ -79,7 +76,7 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
       )}
 
       {/* ── Sidebar ───────────────────────────────────────────────────── */}
-      <div className={isMobile ? `sidebar-drawer${sidebarOpen ? ' open' : ''}` : undefined}>
+      <div className={isMobile ? `sidebar-drawer${sidebarOpen ? ' open' : ''}` : undefined} style={isMobile ? undefined : { display: 'flex' }}>
         <Sidebar
           active={tab}
           user={user}
@@ -101,10 +98,16 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
         {tab === 'messaging' && (
           <MessagingModule user={user} contacts={contacts} logs={logs} onLogsChange={setLogs} onContactsChange={setContacts} />
         )}
+        {tab === 'attendance' && (
+          <AttendanceModule user={user} contacts={contacts} />
+        )}
+        {tab === 'reports' && (
+          <ReportsModule contacts={contacts} />
+        )}
         {tab === 'schedule' && (
           <ScheduleModule user={user} events={events} onEventsChange={setEvents} />
         )}
-        {tab === 'users' && user.role === 'admin' && (
+        {tab === 'users' && canManageUsers(user) && (
           <UsersModule currentUser={user} />
         )}
       </main>
@@ -126,7 +129,7 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
             Menu
           </button>
 
-          {visibleNav.slice(0, 4).map((item) => (
+          {mobileNav.map((item) => (
             <button
               key={item.id}
               className={`mobile-nav-btn${tab === item.id ? ' active' : ''}`}
@@ -135,7 +138,7 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
               aria-current={tab === item.id ? 'page' : undefined}
             >
               <NavIcon d={item.icon} />
-              {item.label}
+              {item.short}
             </button>
           ))}
         </nav>
@@ -145,7 +148,14 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
 }
 
 export default function App() {
-  const [user, setUser] = useState<AuthUser | null>(store.getCurrentUser());
+  // Re-read the account on load so role changes / revoked access take effect.
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    const session = store.getCurrentUser();
+    if (!session) return null;
+    const fresh = store.getUsers().find((u) => u.id === session.id) ?? null;
+    store.setCurrentUser(fresh);
+    return fresh;
+  });
   return (
     <ToastProvider>
       {user ? (

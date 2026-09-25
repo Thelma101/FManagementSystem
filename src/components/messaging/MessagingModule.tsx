@@ -83,8 +83,8 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
     for (let i = 0; i < eligible.length; i++) {
       const c = eligible[i];
       const text = msgText.replace(/{name}/g, c.name.split(' ')[0]);
-      const r = await sendMessage(c.phone, channel, text);
-      newLogs.push({ id: 'ml' + Date.now() + i, contactId: c.id, contactName: c.name, contactPhone: c.phone, channel, content: text, status: r.success ? 'delivered' : 'failed', sentAt: now, sentBy: user.name });
+      const r = await sendMessage(c.phone, channel, text, { whatsappStatus: c.whatsappStatus });
+      newLogs.push({ id: 'ml' + Date.now() + i, contactId: c.id, contactName: c.name, contactPhone: c.phone, channel, content: text, status: r.success ? 'delivered' : 'failed', sentAt: now, sentBy: user.name, kind: 'broadcast' });
       if (r.success) success++;
       setProgress(Math.round(((i + 1) / eligible.length) * 100));
     }

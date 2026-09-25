@@ -1,4 +1,4 @@
-export type UserRole = 'admin' | 'authorized';
+export type UserRole = 'superadmin' | 'admin' | 'authorized';
 
 export interface AuthUser {
   id: string;
@@ -7,21 +7,50 @@ export interface AuthUser {
   role: UserRole;
   passwordHash: string;
   mfaCode: string;
+  createdBy?: string;
+  createdAt?: string;
 }
 
 export type WhatsAppStatus = 'unknown' | 'checking' | 'active' | 'inactive' | 'error';
+
+export type ServiceType = 'sunday' | 'midweek' | 'wsf' | 'spiritual-emphasis' | 'special-event';
+
+export type AttendanceCommitment = 'yes' | 'no' | 'undecided';
 
 export interface Contact {
   id: string;
   name: string;
   phone: string; // E.164 format
   whatsappStatus: WhatsAppStatus;
+  whatsappCheckedAt?: string;
+  /** 'provider' = checked by a real third-party API, 'demo' = simulated result */
+  whatsappCheckSource?: 'provider' | 'demo';
   addedBy: string;
   addedAt: string;
   tags: string[];
   notes: string;
   lastContacted?: string;
   archived?: boolean;
+
+  // Harvest field
+  metLocation?: string;
+  metDate?: string; // YYYY-MM-DD
+
+  // Spiritual status
+  bornAgain?: boolean;
+  salvationDate?: string; // YYYY-MM-DD
+  salvationPlace?: string;
+  baptised?: boolean;
+  baptismDate?: string; // YYYY-MM-DD
+  inCellFellowship?: boolean;
+  cellName?: string;
+
+  // Service commitment
+  attendanceCommitment?: AttendanceCommitment;
+  committedServices?: ServiceType[];
+  committedSpecialEvent?: string;
+
+  welcomeSentAt?: string;
 }
 
 export type MessageChannel = 'sms' | 'whatsapp' | 'both';
@@ -37,6 +66,7 @@ export interface MessageLog {
   status: MessageStatus;
   sentAt: string;
   sentBy: string;
+  kind?: 'welcome' | 'broadcast' | 'direct' | 'scheduled';
 }
 
 export type ScheduleFrequency = 'daily' | 'weekly' | 'monthly';
@@ -58,6 +88,24 @@ export interface ScheduledEvent {
   createdBy: string;
 }
 
+export interface AttendanceRecord {
+  id: string;
+  contactId: string;
+  /** Sunday that starts the service week, YYYY-MM-DD */
+  weekStart: string;
+  serviceType: ServiceType;
+  specialEvent?: string;
+  recordedBy: string;
+  recordedAt: string;
+}
+
+export interface WelcomeTemplate {
+  id: string;
+  label: string;
+  text: string;
+  builtIn?: boolean;
+}
+
 export interface AppState {
   currentUser: AuthUser | null;
   contacts: Contact[];
@@ -66,4 +114,4 @@ export interface AppState {
   activeTab: Tab;
 }
 
-export type Tab = 'dashboard' | 'contacts' | 'messaging' | 'schedule' | 'users';
+export type Tab = 'dashboard' | 'contacts' | 'messaging' | 'attendance' | 'reports' | 'schedule' | 'users';

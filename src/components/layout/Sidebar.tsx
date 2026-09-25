@@ -1,4 +1,5 @@
 import type { Tab, AuthUser } from '../../types';
+import { ROLE_LABEL, canManageUsers } from '../../lib/permissions';
 
 interface Props {
   active: Tab;
@@ -9,7 +10,17 @@ interface Props {
   onMenuToggle?: () => void;
 }
 
-interface NavItem { id: Tab; label: string; icon: React.ReactNode; badge?: number; adminOnly?: boolean; }
+type Counts = Props['counts'];
+
+export const NAV_ITEMS: { id: Tab; label: string; short: string; icon: string; badge?: keyof Counts; adminOnly?: boolean }[] = [
+  { id: 'dashboard',  label: 'Dashboard',  short: 'Home',     icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z' },
+  { id: 'contacts',   label: 'Contacts',   short: 'Contacts', badge: 'contacts', icon: 'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75' },
+  { id: 'attendance', label: 'Attendance', short: 'Attend',   icon: 'M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11' },
+  { id: 'messaging',  label: 'Messaging',  short: 'Messages', badge: 'messages', icon: 'M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z' },
+  { id: 'reports',    label: 'Reports',    short: 'Reports',  icon: 'M18 20V10M12 20V4M6 20v-6' },
+  { id: 'schedule',   label: 'Schedule',   short: 'Schedule', badge: 'schedules', icon: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01' },
+  { id: 'users',      label: 'Users',      short: 'Users',    adminOnly: true, icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z' },
+];
 
 function Icon({ d, size = 16 }: { d: string; size?: number }) {
   return (
@@ -36,19 +47,14 @@ function LfcCrest() {
 }
 
 export default function Sidebar({ active, user, onTabChange, onLogout, counts, onMenuToggle }: Props) {
-  const nav: NavItem[] = [
-    { id: 'dashboard', label: 'Dashboard',  icon: <Icon d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /> },
-    { id: 'contacts',  label: 'Contacts',   badge: counts.contacts,  icon: <Icon d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" /> },
-    { id: 'messaging', label: 'Messaging',  badge: counts.messages,  icon: <Icon d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" /> },
-    { id: 'schedule',  label: 'Schedule',   badge: counts.schedules, icon: <Icon d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /> },
-    { id: 'users',     label: 'Users',      adminOnly: true,         icon: <Icon d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /> },
-  ];
+  const nav = NAV_ITEMS.filter((n) => !n.adminOnly || canManageUsers(user));
 
   const initials = user.name.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase();
 
   return (
     <aside style={{
       width: '232px',
+      height: '100%',
       flexShrink: 0,
       display: 'flex',
       flexDirection: 'column',
@@ -94,8 +100,8 @@ export default function Sidebar({ active, user, onTabChange, onLogout, counts, o
       {/* Nav items */}
       <nav style={{ flex: 1, padding: '4px 10px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '2px' }}>
         {nav.map((item) => {
-          if (item.adminOnly && user.role !== 'admin') return null;
           const isActive = active === item.id;
+          const badge = item.badge ? counts[item.badge] : undefined;
           return (
             <button
               key={item.id}
@@ -103,10 +109,10 @@ export default function Sidebar({ active, user, onTabChange, onLogout, counts, o
               className={`nav-item ${isActive ? 'nav-active' : 'nav-inactive'}`}
             >
               <span style={{ color: isActive ? '#C8A84B' : 'rgba(255,255,255,0.42)', flexShrink: 0, display: 'flex' }}>
-                {item.icon}
+                <Icon d={item.icon} />
               </span>
               <span style={{ flex: 1 }}>{item.label}</span>
-              {item.badge !== undefined && item.badge > 0 && (
+              {badge !== undefined && badge > 0 && (
                 <span style={{
                   fontSize: '11px', fontWeight: 700,
                   padding: '1px 7px', borderRadius: '9999px',
@@ -114,7 +120,7 @@ export default function Sidebar({ active, user, onTabChange, onLogout, counts, o
                   color: isActive ? '#F7EDD0' : 'rgba(255,255,255,0.5)',
                   minWidth: '22px', textAlign: 'center', fontFamily: 'Inter, sans-serif',
                 }}>
-                  {item.badge > 99 ? '99+' : item.badge}
+                  {badge > 99 ? '99+' : badge}
                 </span>
               )}
             </button>
@@ -141,7 +147,7 @@ export default function Sidebar({ active, user, onTabChange, onLogout, counts, o
               {user.name}
             </p>
             <p style={{ fontSize: '11px', color: 'rgba(200,168,75,0.75)' }}>
-              {user.role === 'admin' ? 'Administrator' : 'Authorized user'}
+              {ROLE_LABEL[user.role]}
             </p>
           </div>
         </div>
