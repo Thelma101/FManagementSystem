@@ -3,7 +3,8 @@
  *   POST /api/whatsapp/check   { "phone": "+2348031234567" }
  *   GET  /api/whatsapp/check   → configuration status
  */
-import { handleWhatsAppCheck, waConfigStatus } from '../../server/whatsappCheck';
+// Node ESM on Vercel needs the explicit extension; TypeScript maps .js to the .ts source.
+import { handleWhatsAppCheck, waConfigStatus } from '../../server/whatsappCheck.js';
 
 interface Req {
   method?: string;
@@ -24,7 +25,13 @@ export default async function handler(req: Req, res: Res) {
     res.status(405).json({ error: 'Method not allowed' });
     return;
   }
-  const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body ?? {});
+  let body: unknown;
+  try {
+    body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body ?? {});
+  } catch {
+    res.status(400).json({ configured: true, error: 'Invalid JSON body' });
+    return;
+  }
   const result = await handleWhatsAppCheck((body as { phone?: unknown }).phone, process.env);
   res.status(result.status).json(result.body);
 }
