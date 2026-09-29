@@ -257,7 +257,16 @@ const SEED_EVENTS: ScheduledEvent[] = [
 ];
 
 // ── Storage helpers ───────────────────────────────────────────────────────────
-function load<T>(key: string, seed: T[]): T[] {
+// Demo mode keeps everything in localStorage. Cloud mode (Supabase) keeps an
+// in-memory copy loaded at sign-in and hands every save to the cloud sync.
+export type CollectionKey = 'fp_users' | 'fp_contacts' | 'fp_logs' | 'fp_events' | 'fp_attendance' | 'fp_welcome_templates';
+type CloudSave = (key: CollectionKey, prev: unknown[], next: unknown[]) => void;
+
+let cloud: { data: Record<CollectionKey, unknown[]>; onSave: CloudSave } | null = null;
+let cloudUser: AuthUser | null = null;
+
+function load<T>(key: CollectionKey, seed: T[]): T[] {
+  if (cloud) return cloud.data[key] as T[];
   try {
     const raw = localStorage.getItem(key);
     if (raw) return JSON.parse(raw) as T[];
@@ -266,13 +275,19 @@ function load<T>(key: string, seed: T[]): T[] {
   return seed;
 }
 
-function save<T>(key: string, data: T[]): void {
+function save<T>(key: CollectionKey, data: T[]): void {
+  if (cloud) {
+    const prev = cloud.data[key];
+    cloud.data[key] = data;
+    cloud.onSave(key, prev, data);
+    return;
+  }
   localStorage.setItem(key, JSON.stringify(data));
 }
 
 /** Older saves had no Super Admin; promote the original portal admin. */
 function migrateUsers(users: AuthUser[]): AuthUser[] {
-  if (users.some((u) => u.role === 'superadmin')) return users;
+  if (cloud || users.some((u) => u.role === 'superadmin')) return users;
   const target = users.find((u) => u.id === 'u1') ?? users.find((u) => u.role === 'admin');
   if (!target) return users;
   const next = users.map((u) => (u.id === target.id ? { ...u, role: 'superadmin' as const } : u));
@@ -300,6 +315,7 @@ export const store = {
   saveEvents: (e: ScheduledEvent[]) => save('fp_events', e),
 
   getCurrentUser: (): AuthUser | null => {
+    if (cloud) return cloudUser;
     try {
       const raw = sessionStorage.getItem('fp_session');
       return raw ? JSON.parse(raw) : null;
@@ -308,7 +324,17 @@ export const store = {
     }
   },
   setCurrentUser: (u: AuthUser | null) => {
+    if (cloud) { cloudUser = u; return; }
     if (u) sessionStorage.setItem('fp_session', JSON.stringify(u));
     else sessionStorage.removeItem('fp_session');
+  },
+
+  /** Switch to cloud mode with data loaded from Supabase. */
+  attachCloud: (data: Record<CollectionKey, unknown[]>, onSave: CloudSave) => {
+    cloud = { data, onSave };
+  },
+  detachCloud: () => {
+    cloud = null;
+    cloudUser = null;
   },
 };

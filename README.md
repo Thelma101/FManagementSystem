@@ -48,7 +48,17 @@ WA_CHECK_API_KEY=your-key
 
 Without a provider the portal runs in **demo mode**: checks are simulated (even last digit → on WhatsApp) and labelled "demo" in the contacts list. The Users page shows whether a provider is connected.
 
-## Demo logins
+## Database & sign-in (Supabase)
+
+When the Supabase variables are set (see `.env.example`), the portal stores everything in Supabase and uses Supabase Auth for sign-in. Without them it runs in **demo mode** using browser storage and the demo logins below.
+
+- **Schema:** `supabase/migrations/0001_init.sql` — tables, row-level security (only portal members can read or write; only Admins can delete contacts, logs and schedules). Apply with `npm run db:migrate`.
+- **First Super Admin:** `npm run create-superadmin -- you@example.com "Your Name"` prints a temporary password.
+- **Adding people:** from the Users page. New users get a temporary password and must choose their own at first sign-in. Accounts are created by `api/admin/users` on the server with the secret key, which never reaches the browser.
+- **Forgot password:** sends a reset email. In Supabase → Authentication → URL Configuration, set the Site URL to the live address and add `http://localhost:8443` to the redirect URLs.
+- **Recommended:** Supabase → Authentication → Sign In / Providers → turn off "Allow new users to sign up" (only admins should create accounts).
+
+## Demo logins (demo mode only)
 
 | Role | Email | Password | Code |
 |------|-------|----------|------|
@@ -59,15 +69,15 @@ Without a provider the portal runs in **demo mode**: checks are simulated (even 
 
 - React 19 + Vite 8 + TypeScript, Tailwind CSS v4
 - `libphonenumber-js` (phone validation), `write-excel-file`, `jspdf` + `jspdf-autotable`, `docx` (report exports, loaded on demand)
-- Serverless function in `api/` for the WhatsApp check (Vercel-style); the same handler runs inside the Vite dev/preview server
-- **Current storage:** browser `localStorage` — data lives on each device only. See *Going live* below.
+- Supabase (Postgres + Auth) via `@supabase/supabase-js`; demo mode falls back to browser `localStorage`
+- Serverless functions in `api/` (WhatsApp check, user management), Vercel-style; the same handlers run inside the Vite dev/preview server
 
 ## Going live
 
 The portal is a web application: people use it in a browser (phone or laptop) at a web address, so no physical servers are needed. For real church use with several team members sharing the same data:
 
 1. **Hosting (frontend + API):** Vercel or Netlify — deploy straight from this GitHub repo; free tier is enough to start.
-2. **Database + logins:** Supabase or Firebase — so every user sees the same contacts, attendance and reports, with real password security and backups.
+2. **Database + logins:** Supabase (connected — see above) so every user sees the same contacts, attendance and reports.
 3. **Messaging:** an SMS provider (Termii, Africa's Talking, Twilio) and WhatsApp via the Meta WhatsApp Cloud API or a partner (BSP).
 4. **WhatsApp number check:** WA Lookup or 2Chat key set as an environment variable.
 5. **Scheduled reminders:** a server-side cron job (Vercel Cron / Supabase scheduled functions) so reminders go out even when nobody has the portal open.

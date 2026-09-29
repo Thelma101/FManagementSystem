@@ -3,8 +3,11 @@ import type { AuthUser, Contact, MessageLog, ScheduledEvent, Tab } from './types
 import { store } from './lib/store';
 import { logout } from './lib/mockApi';
 import { canManageUsers } from './lib/permissions';
-import { ToastProvider } from './components/ui/Toast';
+import { isCloud, openedFromRecoveryLink } from './lib/supabase';
+import { hasPendingWrites, onPasswordRecovery, onSyncError, refreshIfStale, restoreSession, signOut } from './lib/cloud';
+import { ToastProvider, useToast } from './components/ui/Toast';
 import LoginScreen from './components/auth/LoginScreen';
+import SetPasswordScreen from './components/auth/SetPasswordScreen';
 import Sidebar, { NAV_ITEMS } from './components/layout/Sidebar';
 import Dashboard from './components/dashboard/Dashboard';
 import ContactsModule from './components/contacts/ContactsModule';
@@ -42,11 +45,36 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
   const [logs, setLogs]         = useState<MessageLog[]>([]);
   const [events, setEvents]     = useState<ScheduledEvent[]>([]);
   const isMobile = useIsMobile();
+  const { toast } = useToast();
 
-  useEffect(() => {
+  function reloadFromStore() {
     setContacts(store.getContacts());
     setLogs(store.getLogs());
     setEvents(store.getEvents());
+  }
+
+  useEffect(reloadFromStore, []);
+
+  useEffect(() => {
+    if (!isCloud) return;
+    const offError = onSyncError((msg) => toast('error', 'Change not saved', msg));
+
+    // Pick up changes made by other team members when returning to the tab.
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      refreshIfStale().then((changed) => { if (changed) reloadFromStore(); }).catch(() => {});
+    };
+    const beforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasPendingWrites()) e.preventDefault();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('beforeunload', beforeUnload);
+    return () => {
+      offError();
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('beforeunload', beforeUnload);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Close drawer when tab changes on mobile
@@ -147,22 +175,85 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
   );
 }
 
+function LoadingScreen({ error, onRetry }: { error?: string; onRetry: () => void }) {
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: '14px', background: 'var(--bg)' }}>
+      {error ? (
+        <>
+          <p style={{ color: 'var(--red)', fontSize: '14px', maxWidth: '360px', textAlign: 'center' }}>{error}</p>
+          <button className="btn btn-primary" onClick={onRetry}>Try again</button>
+        </>
+      ) : (
+        <>
+          <svg className="spin" width="26" height="26" fill="none" stroke="var(--navy)" strokeWidth="2.5" viewBox="0 0 24 24">
+            <path d="M21 12a9 9 0 11-6.219-8.56" />
+          </svg>
+          <p style={{ color: 'var(--text-3)', fontSize: '13.5px' }}>Loading portal…</p>
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
-  // Re-read the account on load so role changes / revoked access take effect.
+  // Demo mode: re-read the account on load so role changes / revoked access take effect.
   const [user, setUser] = useState<AuthUser | null>(() => {
+    if (isCloud) return null;
     const session = store.getCurrentUser();
     if (!session) return null;
     const fresh = store.getUsers().find((u) => u.id === session.id) ?? null;
     store.setCurrentUser(fresh);
     return fresh;
   });
-  return (
-    <ToastProvider>
-      {user ? (
-        <PortalShell user={user} onLogout={() => { logout(); setUser(null); }} />
-      ) : (
-        <LoginScreen onLogin={(u) => setUser(u)} />
-      )}
-    </ToastProvider>
-  );
+  const [booting, setBooting] = useState(isCloud);
+  const [bootError, setBootError] = useState('');
+  const [recovery, setRecovery] = useState(openedFromRecoveryLink);
+
+  function boot() {
+    setBootError('');
+    setBooting(true);
+    restoreSession()
+      .then((u) => { store.setCurrentUser(u); setUser(u); })
+      .catch((err: unknown) => setBootError(err instanceof Error ? err.message : 'Could not load the portal.'))
+      .finally(() => setBooting(false));
+  }
+
+  useEffect(() => {
+    if (!isCloud) return;
+    boot();
+    return onPasswordRecovery(() => setRecovery(true));
+  }, []);
+
+  function handleLogin(u: AuthUser) {
+    store.setCurrentUser(u);
+    setUser(u);
+  }
+
+  async function handleLogout() {
+    if (isCloud) await signOut();
+    else logout();
+    setRecovery(false);
+    setUser(null);
+  }
+
+  let screen: React.ReactNode;
+  if (booting || bootError) screen = <LoadingScreen error={bootError} onRetry={boot} />;
+  else if (!user) screen = <LoginScreen onLogin={handleLogin} />;
+  else if (isCloud && (recovery || user.mustChangePassword)) {
+    screen = (
+      <SetPasswordScreen
+        name={user.name}
+        reason={recovery ? 'recovery' : 'first-login'}
+        onCancel={handleLogout}
+        onDone={() => {
+          const updated = { ...user, mustChangePassword: false };
+          store.setCurrentUser(updated);
+          setRecovery(false);
+          setUser(updated);
+        }}
+      />
+    );
+  } else screen = <PortalShell user={user} onLogout={handleLogout} />;
+
+  return <ToastProvider>{screen}</ToastProvider>;
 }

@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { login, verifyMfa } from '../../lib/mockApi';
+import { isCloud } from '../../lib/supabase';
+import { requestPasswordReset, signIn } from '../../lib/cloud';
 import type { AuthUser } from '../../types';
 
 interface Props { onLogin: (user: AuthUser) => void; }
@@ -20,7 +22,13 @@ function LfcCrest({ size = 72 }: { size?: number }) {
   );
 }
 
-type Step = 'credentials' | 'mfa';
+type Step = 'credentials' | 'mfa' | 'reset';
+
+const HEADINGS: Record<Step, { badge: string; title: string; subtitle: string }> = {
+  credentials: { badge: 'Secure Portal Access', title: 'Welcome back', subtitle: 'Sign in to access the communications portal.' },
+  mfa: { badge: 'Two-Factor Verification', title: "Verify it's you", subtitle: 'Enter the 6-digit code from your authenticator.' },
+  reset: { badge: 'Password Reset', title: 'Forgot password?', subtitle: "Enter your email and we'll send you a link to set a new password." },
+};
 
 export default function LoginScreen({ onLogin }: Props) {
   const [step, setStep]         = useState<Step>('credentials');
@@ -31,12 +39,25 @@ export default function LoginScreen({ onLogin }: Props) {
   const [mfaHint, setMfaHint]   = useState('');
   const [showPw, setShowPw]     = useState(false);
   const [error, setError]       = useState('');
+  const [info, setInfo]         = useState('');
   const [loading, setLoading]   = useState(false);
 
   async function handleCredentials(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setLoading(true);
+    if (isCloud) {
+      try {
+        const res = await signIn(email, password);
+        if (res.ok) { onLogin(res.user); return; }
+        setError(res.error);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Sign-in failed. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
     const result = await login(email, password);
     setLoading(false);
     if (!result.ok) { setError(result.error); return; }
@@ -55,13 +76,27 @@ export default function LoginScreen({ onLogin }: Props) {
     onLogin(result.user);
   }
 
+  async function handleReset(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setInfo('');
+    setLoading(true);
+    const err = await requestPasswordReset(email);
+    setLoading(false);
+    if (err) setError(err);
+    else setInfo(`If ${email.trim()} has portal access, a reset link is on its way. Check your inbox (and spam folder).`);
+  }
+
   function backToCredentials() {
     setStep('credentials');
     setMfaCode('');
     setError('');
+    setInfo('');
     setPendingUserId('');
     setMfaHint('');
   }
+
+  const heading = HEADINGS[step];
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', fontFamily: 'Inter, sans-serif' }}>
@@ -178,7 +213,7 @@ export default function LoginScreen({ onLogin }: Props) {
             }}>
               <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#002B6B', display: 'inline-block' }} />
               <span style={{ fontSize: '11px', fontWeight: 700, color: '#002B6B', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                {step === 'credentials' ? 'Secure Portal Access' : 'Two-Factor Verification'}
+                {heading.badge}
               </span>
             </div>
             <h2 style={{
@@ -189,12 +224,10 @@ export default function LoginScreen({ onLogin }: Props) {
               marginBottom: '8px',
               letterSpacing: '-0.02em',
             }}>
-              {step === 'credentials' ? 'Welcome back' : 'Verify it\'s you'}
+              {heading.title}
             </h2>
             <p style={{ color: '#64748B', fontSize: '14px', lineHeight: 1.6 }}>
-              {step === 'credentials'
-                ? 'Sign in to access the communications portal.'
-                : 'Enter the 6-digit code from your authenticator.'}
+              {heading.subtitle}
             </p>
           </div>
 
@@ -282,7 +315,31 @@ export default function LoginScreen({ onLogin }: Props) {
                     </svg>
                     Signing in…
                   </span>
-                ) : 'Continue'}
+                ) : isCloud ? 'Sign in' : 'Continue'}
+              </button>
+
+              {isCloud && (
+                <button type="button" className="btn btn-ghost" style={{ width: '100%' }}
+                  onClick={() => { setStep('reset'); setError(''); setInfo(''); }}>
+                  Forgot password?
+                </button>
+              )}
+            </form>
+          ) : step === 'reset' ? (
+            <form onSubmit={handleReset} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label className="label">Email address</label>
+                <input type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)}
+                  required placeholder="you@fellowship.church" autoComplete="email" autoFocus />
+              </div>
+              {error && <div className="alert alert-red">{error}</div>}
+              {info && <div className="alert alert-navy">{info}</div>}
+              <button type="submit" disabled={loading} className="btn btn-primary"
+                style={{ width: '100%', padding: '11px', fontSize: '14.5px', fontWeight: 600 }}>
+                {loading ? 'Sending…' : 'Send reset link'}
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={backToCredentials} style={{ width: '100%' }}>
+                ← Back to sign in
               </button>
             </form>
           ) : (
@@ -340,7 +397,7 @@ export default function LoginScreen({ onLogin }: Props) {
             </form>
           )}
 
-          {step === 'credentials' && (
+          {step === 'credentials' && !isCloud && (
             <div style={{
               marginTop: '28px', padding: '16px 18px',
               borderRadius: '10px', background: '#F5F8FD',

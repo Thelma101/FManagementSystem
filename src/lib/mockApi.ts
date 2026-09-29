@@ -30,7 +30,7 @@ export async function login(email: string, password: string): Promise<LoginResul
     ok: true,
     pendingMfa: true,
     userId: user.id,
-    hint: user.mfaCode, // demo only — real backends never return the code
+    hint: user.mfaCode ?? '', // demo only — real backends never return the code
   };
 }
 

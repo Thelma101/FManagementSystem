@@ -4,6 +4,8 @@ import { store } from '../../lib/store';
 import { ROLE_DESCRIPTION, ROLE_LABEL, assignableRoles, canManageUser } from '../../lib/permissions';
 import { getWaIntegrationStatus, providerName, type WaIntegrationStatus } from '../../lib/whatsapp';
 import { fmtDate } from '../../lib/services';
+import { isCloud } from '../../lib/supabase';
+import { adminUsers } from '../../lib/cloud';
 import { useToast } from '../ui/Toast';
 
 interface Props { currentUser: AuthUser; }
@@ -13,7 +15,7 @@ function genMfa() { return String(Math.floor(100000 + Math.random() * 900000)); 
 const ROLE_ORDER: UserRole[] = ['superadmin', 'admin', 'authorized'];
 const ROLE_BADGE: Record<UserRole, string> = { superadmin: 'badge-gold', admin: 'badge-navy', authorized: 'badge-gray' };
 
-interface Credentials { name: string; email: string; password: string; mfaCode: string; role: UserRole }
+interface Credentials { name: string; email: string; password: string; mfaCode?: string; role: UserRole }
 
 export default function UsersModule({ currentUser }: Props) {
   const { toast } = useToast();
@@ -25,6 +27,7 @@ export default function UsersModule({ currentUser }: Props) {
   const [error, setError] = useState('');
   const [created, setCreated] = useState<Credentials | null>(null);
   const [wa, setWa] = useState<WaIntegrationStatus | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => { getWaIntegrationStatus().then(setWa); }, []);
 
@@ -33,7 +36,7 @@ export default function UsersModule({ currentUser }: Props) {
     setUsers(next);
   }
 
-  function handleAdd(e: React.FormEvent) {
+  async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     if (!allowedRoles.includes(form.role)) {
@@ -44,8 +47,20 @@ export default function UsersModule({ currentUser }: Props) {
       setError('A user with this email already exists.');
       return;
     }
-    if (form.password.length < 6) {
-      setError('Temporary password must be at least 6 characters.');
+    if (form.password.length < 8) {
+      setError('Temporary password must be at least 8 characters.');
+      return;
+    }
+    if (isCloud) {
+      setBusy(true);
+      const res = await adminUsers('POST', { name: form.name.trim(), email: form.email.trim(), password: form.password, role: form.role });
+      setBusy(false);
+      if (!res.user) { setError(res.error ?? 'Could not add user'); return; }
+      persist([...users, res.user]);
+      setOpen(false);
+      setForm(blankForm);
+      setCreated({ name: res.user.name, email: res.user.email, password: form.password, role: res.user.role });
+      toast('success', 'Access granted', res.user.name);
       return;
     }
     const newUser: AuthUser = {
@@ -61,22 +76,31 @@ export default function UsersModule({ currentUser }: Props) {
     toast('success', 'Access granted', newUser.name);
   }
 
-  function changeRole(target: AuthUser, role: UserRole) {
+  async function changeRole(target: AuthUser, role: UserRole) {
     if (!canManageUser(currentUser, target) || !allowedRoles.includes(role)) return;
     if (!confirm(`Change ${target.name}'s role to ${ROLE_LABEL[role]}?`)) return;
+    if (isCloud) {
+      const res = await adminUsers('PATCH', { id: target.id, role });
+      if (!res.user) { toast('error', 'Role not changed', res.error); return; }
+    }
     persist(users.map((u) => (u.id === target.id ? { ...u, role } : u)));
     toast('success', 'Role updated', `${target.name} is now ${ROLE_LABEL[role]}`);
   }
 
-  function revokeUser(target: AuthUser) {
+  async function revokeUser(target: AuthUser) {
     if (!canManageUser(currentUser, target)) { toast('error', "You can't revoke this account"); return; }
     if (!confirm(`Revoke access for ${target.name}? They will no longer be able to sign in.`)) return;
+    if (isCloud) {
+      const res = await adminUsers('DELETE', { id: target.id });
+      if (res.error) { toast('error', 'Access not revoked', res.error); return; }
+    }
     persist(users.filter((x) => x.id !== target.id));
     toast('info', 'Access revoked', target.name);
   }
 
   function copyCredentials(c: Credentials) {
-    const text = `Fellowship Portal access\nURL: ${window.location.origin}\nEmail: ${c.email}\nTemporary password: ${c.password}\nVerification code: ${c.mfaCode}`;
+    const text = `Fellowship Portal access\nURL: ${window.location.origin}\nEmail: ${c.email}\nTemporary password: ${c.password}` +
+      (c.mfaCode ? `\nVerification code: ${c.mfaCode}` : '\nYou will be asked to choose your own password when you first sign in.');
     navigator.clipboard?.writeText(text).then(
       () => toast('success', 'Copied to clipboard'),
       () => toast('error', 'Could not copy — please copy manually'),
@@ -120,7 +144,7 @@ export default function UsersModule({ currentUser }: Props) {
                   <span>Role</span><strong>{ROLE_LABEL[created.role]}</strong>
                   <span>Email</span><code>{created.email}</code>
                   <span>Temporary password</span><code>{created.password}</code>
-                  <span>Verification code</span><code>{created.mfaCode}</code>
+                  {created.mfaCode && <><span>Verification code</span><code>{created.mfaCode}</code></>}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
@@ -264,7 +288,7 @@ export default function UsersModule({ currentUser }: Props) {
                 </div>
                 <div>
                   <label className="label">Temporary password *</label>
-                  <input required className="input" value={form.password} minLength={6} placeholder="At least 6 characters"
+                  <input required className="input" value={form.password} minLength={8} placeholder="At least 8 characters"
                     onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} />
                 </div>
                 <div>
@@ -284,7 +308,7 @@ export default function UsersModule({ currentUser }: Props) {
               </div>
               <div className="modal-footer">
                 <button type="button" className="btn btn-outline" onClick={() => setOpen(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Grant access</button>
+                <button type="submit" className="btn btn-primary" disabled={busy}>{busy ? 'Adding…' : 'Grant access'}</button>
               </div>
             </form>
           </div>

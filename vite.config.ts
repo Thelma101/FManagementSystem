@@ -5,6 +5,7 @@ import path from 'node:path'
 
 import siteConfiguration from './.figma/make/site.json'
 import { handleWhatsAppCheck, waConfigStatus, type WaEnv } from './server/whatsappCheck'
+import { handleAdminUsers, type AdminEnv } from './server/adminUsers'
 
 
 // Vite config — https://vitejs.dev/config/
@@ -12,9 +13,11 @@ export default defineConfig(({ mode }) => {
   // .figma/make/deploy-preview passes `--mode development` for cached-preview builds.
   const emitSourcemaps = mode === 'development'
   // Empty prefix loads non-VITE_ vars too; they stay on the server and are never bundled.
-  const serverEnv = { ...loadEnv(mode, process.cwd(), ''), ...process.env } as WaEnv
+  const serverEnv = { ...loadEnv(mode, process.cwd(), ''), ...process.env } as WaEnv & AdminEnv
 
   return {
+    // NEXT_PUBLIC_ is what the Supabase ↔ Vercel integration creates; only these prefixes reach the browser.
+    envPrefix: ['VITE_', 'NEXT_PUBLIC_'],
     base: process.env.FIGMA_PUBLIC_URL ? `${process.env.FIGMA_PUBLIC_URL}/` : '/',
     build: {
       sourcemap: emitSourcemaps ? 'inline' : false,
@@ -27,7 +30,7 @@ react(),
       figmaErrorOverlayReplay(),
       figmaReactRefreshBoundaryFallback(),
       figmaMakeKitPlugin({ storiesGlob: '/src/**/*.stories.{ts,tsx,js,jsx}' }),
-      whatsappCheckApi(serverEnv),
+      serverApi(serverEnv),
     ],
     resolve: {
       alias: {
@@ -51,12 +54,11 @@ react(),
   }
 })
 
-/** Serves /api/whatsapp/check during `vite dev` and `vite preview`. */
-function whatsappCheckApi(env: WaEnv): Plugin {
-  const ROUTE = '/api/whatsapp/check'
-
+/** Serves the /api/* serverless routes during `vite dev` and `vite preview`. */
+function serverApi(env: WaEnv & AdminEnv): Plugin {
   const middleware: Connect.NextHandleFunction = (req, res, next) => {
-    if (req.url?.split('?')[0] !== ROUTE) return next()
+    const route = req.url?.split('?')[0]
+    if (route !== '/api/whatsapp/check' && route !== '/api/admin/users') return next()
 
     const send = (status: number, body: unknown) => {
       res.statusCode = status
@@ -64,28 +66,36 @@ function whatsappCheckApi(env: WaEnv): Plugin {
       res.end(JSON.stringify(body))
     }
 
-    if (req.method === 'GET') {
+    if (route === '/api/whatsapp/check' && req.method === 'GET') {
       const cfg = waConfigStatus(env)
       return send(200, { configured: cfg.configured, provider: cfg.provider })
     }
-    if (req.method !== 'POST') return send(405, { error: 'Method not allowed' })
 
     let raw = ''
     req.on('data', (chunk) => { raw += chunk })
     req.on('end', async () => {
-      let phone: unknown
+      let body: Record<string, unknown>
       try {
-        phone = (JSON.parse(raw || '{}') as { phone?: unknown }).phone
+        body = JSON.parse(raw || '{}') as Record<string, unknown>
       } catch {
         return send(400, { configured: true, error: 'Invalid JSON body' })
       }
-      const result = await handleWhatsAppCheck(phone, env)
-      send(result.status, result.body)
+      try {
+        if (route === '/api/admin/users') {
+          const result = await handleAdminUsers(req.method, req.headers.authorization, body, env)
+          return send(result.status, result.body)
+        }
+        if (req.method !== 'POST') return send(405, { error: 'Method not allowed' })
+        const result = await handleWhatsAppCheck(body.phone, env)
+        send(result.status, result.body)
+      } catch (err) {
+        send(500, { error: err instanceof Error ? err.message : 'Server error' })
+      }
     })
   }
 
   return {
-    name: 'whatsapp-check-api',
+    name: 'server-api',
     configureServer(server) {
       server.middlewares.use(middleware)
     },
