@@ -11,6 +11,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { AuthUser, UserRole } from '../src/types/index.js';
 import { assignableRoles, canManageUser, canManageUsers } from '../src/lib/permissions.js';
+import { passwordError } from '../src/lib/passwordRules.js';
 
 export interface AdminEnv {
   SUPABASE_URL?: string;
@@ -78,7 +79,8 @@ export async function handleAdminUsers(
     const password = String(body.password ?? '');
     const role = body.role as UserRole;
     if (!name || !email) return fail(400, 'Name and email are required');
-    if (password.length < 8) return fail(400, 'Temporary password must be at least 8 characters');
+    const tooShort = passwordError(password);
+    if (tooShort) return fail(400, `Temporary password: ${tooShort.toLowerCase()}`);
     if (!ROLES.includes(role) || !assignableRoles(actor).includes(role)) return fail(403, 'You cannot grant that role');
 
     const { data: created, error } = await admin.auth.admin.createUser({

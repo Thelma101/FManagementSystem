@@ -7,6 +7,7 @@ import { fmtDate } from '../../lib/services';
 import { isCloud } from '../../lib/supabase';
 import { adminUsers } from '../../lib/cloud';
 import { useToast } from '../ui/Toast';
+import { MIN_PASSWORD_LENGTH, passwordError } from '../../lib/passwordRules';
 
 interface Props { currentUser: AuthUser; }
 
@@ -47,8 +48,9 @@ export default function UsersModule({ currentUser }: Props) {
       setError('A user with this email already exists.');
       return;
     }
-    if (form.password.length < 8) {
-      setError('Temporary password must be at least 8 characters.');
+    const tooShort = passwordError(form.password);
+    if (tooShort) {
+      setError(`Temporary password: ${tooShort.toLowerCase()}`);
       return;
     }
     if (isCloud) {
@@ -288,7 +290,7 @@ export default function UsersModule({ currentUser }: Props) {
                 </div>
                 <div>
                   <label className="label">Temporary password *</label>
-                  <input required className="input" value={form.password} minLength={8} placeholder="At least 8 characters"
+                  <input required className="input" value={form.password} minLength={MIN_PASSWORD_LENGTH} placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
                     onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} />
                 </div>
                 <div>

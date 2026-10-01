@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { changePassword } from '../../lib/cloud';
+import { MIN_PASSWORD_LENGTH, passwordError } from '../../lib/passwordRules';
 
 interface Props {
   name?: string;
@@ -17,7 +18,8 @@ export default function SetPasswordScreen({ name, reason, onDone, onCancel }: Pr
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
-    if (password.length < 8) { setError('Use at least 8 characters.'); return; }
+    const tooShort = passwordError(password);
+    if (tooShort) { setError(tooShort); return; }
     if (password !== confirm) { setError('The two passwords do not match.'); return; }
     setSaving(true);
     const err = await changePassword(password);
@@ -44,7 +46,7 @@ export default function SetPasswordScreen({ name, reason, onDone, onCancel }: Pr
           <div>
             <label className="label">New password</label>
             <input type="password" className="input" value={password} onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password" autoFocus required minLength={8} placeholder="At least 8 characters" />
+              autoComplete="new-password" autoFocus required minLength={MIN_PASSWORD_LENGTH} placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`} />
           </div>
           <div>
             <label className="label">Confirm new password</label>
