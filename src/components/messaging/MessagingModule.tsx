@@ -1,8 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import type { Contact, MessageLog, AuthUser } from '../../types';
 import { store } from '../../lib/store';
 import { sendMessage } from '../../lib/mockApi';
 import { useToast } from '../ui/Toast';
+import SmsCounter from '../ui/SmsCounter';
+import { toGsm } from '../../lib/sms';
+import { getSmsGatewayStatus, type SmsGatewayStatus } from '../../lib/smsGateway';
 
 interface Props {
   user: AuthUser;
@@ -13,12 +16,12 @@ interface Props {
 }
 
 const TEMPLATES = [
-  { label: 'Harvest Field Invite', text: 'Dear {name}, you are warmly invited to our Sunday Harvest Field meeting this Sunday at 9:00 AM. Come and experience God\'s power! — Living Faith Church' },
-  { label: 'Midweek Service',      text: 'Dear {name}, our midweek Bible study holds this Wednesday at 5:30 PM. Come hungry for the Word! — Living Faith Church' },
-  { label: 'WSF Meeting',          text: 'Dear {name}, the WSF (Weekly Sunday Fellowship) holds this Sunday at 8:00 AM. A special session for new believers. You are welcome! — Living Faith Church' },
-  { label: 'Shiloh 2026',          text: 'Dear {name}, SHILOH 2026 holds December 7–11. Do not miss this divine encounter! — Living Faith Church' },
-  { label: 'Follow-Up',            text: 'Dear {name}, we are thinking of you and trust you are doing well. We look forward to seeing you at our next service. God bless you! — Living Faith Church' },
-  { label: 'Youth Programme',      text: 'Dear {name}, our Youth Programme holds this coming Saturday! Bring a friend and celebrate God\'s grace. You are specially invited! — Living Faith Church' },
+  { label: 'Harvest Field Invite', text: 'Dear {name}, you are warmly invited to our Harvest Field meeting this Sunday at 9:00 AM. Come and experience God\'s power! - Living Faith Church' },
+  { label: 'Midweek Service',      text: 'Dear {name}, our midweek Bible study holds this Wednesday at 5:30 PM. Come hungry for the Word! - Living Faith Church' },
+  { label: 'WSF Meeting',          text: 'Dear {name}, WSF holds this Sunday at 8:00 AM, a special session for new believers. You are welcome! - Living Faith Church' },
+  { label: 'Shiloh 2026',          text: 'Dear {name}, SHILOH 2026 holds December 7-11. Do not miss this divine encounter! - Living Faith Church' },
+  { label: 'Follow-Up',            text: 'Dear {name}, we are thinking of you and trust you are well. We look forward to seeing you at our next service. God bless! - Living Faith Church' },
+  { label: 'Youth Programme',      text: 'Dear {name}, our Youth Programme holds this Saturday! Bring a friend and celebrate God\'s grace. You are specially invited! - Living Faith Church' },
 ];
 
 export default function MessagingModule({ user, contacts, logs, onLogsChange, onContactsChange }: Props) {
@@ -32,6 +35,11 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
   const [contactSearch, setContactSearch] = useState('');
   const [logSearch, setLogSearch] = useState('');
   const [logFilterCh, setLogFilterCh] = useState('');
+  const [gateway, setGateway] = useState<SmsGatewayStatus | null>(null);
+
+  useEffect(() => {
+    if (sending === null) void getSmsGatewayStatus().then(setGateway);
+  }, [sending]);
 
   const activeContacts = contacts.filter((c) => !c.archived);
 
@@ -78,26 +86,33 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
       return;
     }
     let success = 0;
+    let stopped: string | undefined;
+    const reached = new Set<string>();
     const newLogs: MessageLog[] = [];
     const now = new Date().toISOString();
     for (let i = 0; i < eligible.length; i++) {
       const c = eligible[i];
       const text = msgText.replace(/{name}/g, c.name.split(' ')[0]);
       const r = await sendMessage(c.phone, channel, text, { whatsappStatus: c.whatsappStatus });
-      newLogs.push({ id: 'ml' + Date.now() + i, contactId: c.id, contactName: c.name, contactPhone: c.phone, channel, content: text, status: r.success ? 'delivered' : 'failed', sentAt: now, sentBy: user.name, kind: 'broadcast' });
-      if (r.success) success++;
+      newLogs.push({ id: 'ml' + Date.now() + i, contactId: c.id, contactName: c.name, contactPhone: c.phone, channel, content: text, status: r.status, sentAt: now, sentBy: user.name, kind: 'broadcast' });
+      if (r.success) { success++; reached.add(c.id); }
       setProgress(Math.round(((i + 1) / eligible.length) * 100));
+      if (r.fatal) { stopped = r.error; break; }
     }
     const allLogs = [...newLogs, ...store.getLogs()];
     store.saveLogs(allLogs);
     onLogsChange(allLogs);
-    const updated = contacts.map((c) => eligible.some((e) => e.id === c.id) ? { ...c, lastContacted: now } : c);
+    const updated = contacts.map((c) => reached.has(c.id) ? { ...c, lastContacted: now } : c);
     store.saveContacts(updated);
     onContactsChange(updated);
     setSending(null);
     setProgress(0);
+    if (stopped) {
+      toast('error', 'Sending stopped', `${stopped} ${success} of ${eligible.length} sent.`);
+      return;
+    }
     setSelectedIds(new Set());
-    toast('success', `Sent via ${channel === 'sms' ? 'SMS' : 'WhatsApp'}`, `${success} of ${eligible.length} delivered`);
+    toast(success ? 'success' : 'error', `Sent via ${channel === 'sms' ? 'SMS' : 'WhatsApp'}`, `${success} of ${eligible.length} sent`);
     setTab('history');
   }
 
@@ -111,7 +126,7 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
             <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: '1.8rem', fontWeight: 500, color: 'var(--text)' }}>Messaging</h1>
           </div>
           <div style={{ display: 'flex', gap: '24px', paddingTop: '4px' }}>
-            {[{ label: 'Sent', val: logs.length }, { label: 'Delivered', val: logs.filter(l => l.status === 'delivered').length }].map((s) => (
+            {[{ label: 'Sent', val: logs.length }, { label: 'Successful', val: logs.filter(l => l.status === 'delivered' || l.status === 'sent').length }].map((s) => (
               <div key={s.label} style={{ textAlign: 'right' }}>
                 <p style={{ fontFamily: 'Playfair Display, serif', fontSize: '1.4rem', color: 'var(--gold)' }}>{s.val}</p>
                 <p style={{ fontSize: '11px', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{s.label}</p>
@@ -166,9 +181,6 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
                     <label className="label" style={{ margin: 0 }}>Message <span style={{ fontWeight: 400, color: 'var(--text-3)' }}>— use {'{name}'} for personalisation</span></label>
-                    <span style={{ fontSize: '11.5px', color: msgText.length > 160 ? 'var(--amber)' : 'var(--text-3)' }}>
-                      {msgText.length} chars
-                    </span>
                   </div>
                   <textarea
                     rows={6}
@@ -177,9 +189,7 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
                     onChange={(e) => { setMsgText(e.target.value); setActiveTemplate(null); }}
                     placeholder="Dear {name}, you are warmly invited to…"
                   />
-                  {msgText.length > 160 && (
-                    <p style={{ fontSize: '12px', color: 'var(--amber)', marginTop: '3px' }}>Message exceeds 160 chars — may be split into 2 SMS parts.</p>
-                  )}
+                  <SmsCounter text={previewText || msgText} onFix={() => { setMsgText(toGsm(msgText)); setActiveTemplate(null); }} hasPlaceholders={msgText.includes('{name}')} />
                 </div>
 
                 {/* Recipients */}
@@ -263,6 +273,14 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
                       {waCount > 0 && <span style={{ fontSize: '12px', fontWeight: 400, marginLeft: '4px' }}>({waCount})</span>}
                     </button>
                   </div>
+                  {gateway && (
+                    <p style={{ fontSize: '12px', color: gateway.configured ? 'var(--text-3)' : 'var(--amber)', marginTop: '6px' }}>
+                      {gateway.configured
+                        ? `SMS goes out through eBulkSMS as "${gateway.sender}"${gateway.balance !== undefined ? ` · ${gateway.balance} units left (about ${Math.floor(gateway.balance / 4)} SMS)` : ''}.`
+                        : 'SMS sending is simulated: no SMS provider is connected on this site.'}
+                      {' '}WhatsApp sending is simulated until a WhatsApp provider is connected.
+                    </p>
+                  )}
                   {selectedIds.size > 0 && waCount === 0 && (
                     <p style={{ fontSize: '12px', color: 'var(--amber)', marginTop: '5px' }}>
                       None of the selected contacts have WhatsApp verified. WhatsApp button is disabled.
@@ -372,7 +390,7 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
                           {new Date(log.sentAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                         </td>
                         <td style={{ textAlign: 'right', paddingRight: '24px' }}>
-                          <span className={`badge ${log.status === 'delivered' ? 'badge-green' : log.status === 'failed' ? 'badge-red' : 'badge-amber'}`}>
+                          <span className={`badge ${log.status === 'delivered' ? 'badge-green' : log.status === 'failed' ? 'badge-red' : log.status === 'sent' ? 'badge-blue' : 'badge-amber'}`}>
                             {log.status}
                           </span>
                         </td>

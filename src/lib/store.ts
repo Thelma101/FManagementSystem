@@ -138,27 +138,29 @@ const SEED_WELCOME: WelcomeTemplate[] = [
     id: 'w1',
     label: 'Harvest field welcome',
     builtIn: true,
-    text:
-      'Dear {name}, it was a joy meeting you at {location} on {date}. God loves you and so do we! ' +
-      'You are warmly invited to worship with us at Living Faith Church. We look forward to seeing you. — Living Faith Church',
+    text: 'Dear {name}, it was a joy meeting you at {location}. God loves you and so do we! Come and worship with us at Living Faith Church.',
   },
   {
     id: 'w2',
     label: 'New convert welcome',
     builtIn: true,
-    text:
-      'Dear {name}, congratulations on giving your life to Christ! We were blessed to meet you at {location}. ' +
-      'Our Sunday service holds at 7:00 AM and our WSF (cell fellowship) meets weekly near you. Welcome to the family! — Living Faith Church',
+    text: "Dear {name}, welcome to God's family! Join us on Sunday at 7AM and at our WSF cell fellowship near you. God bless you! - Living Faith Church",
   },
   {
     id: 'w3',
     label: 'Service invitation',
     builtIn: true,
-    text:
-      'Dear {name}, thank you for your time at {location} on {date}. You are specially invited to our {service}. ' +
-      'Come expecting a touch from God! — Living Faith Church',
+    text: 'Dear {name}, thanks for your time at {location}. You are invited to our {service} at Living Faith Church. Come expecting a touch from God!',
   },
 ];
+
+/** Built-in templates can't be edited in the portal, so always serve their current wording. */
+function withCurrentBuiltIns(list: WelcomeTemplate[]): WelcomeTemplate[] {
+  return list.map((t) => {
+    const seed = t.builtIn ? SEED_WELCOME.find((s) => s.id === t.id) : undefined;
+    return seed ? { ...t, label: seed.label, text: seed.text } : t;
+  });
+}
 
 // ── Seed message logs ─────────────────────────────────────────────────────────
 const SEED_LOGS: MessageLog[] = [
@@ -204,7 +206,7 @@ const SEED_EVENTS: ScheduledEvent[] = [
     time: '10:00',
     leadTimeHours: [24, 2],
     messageTemplate:
-      'Dear {name}, you are warmly invited to our Sunday Harvest Field meeting tomorrow at 9:00 AM. Come and be blessed! — Living Faith Church',
+      'Dear {name}, you are warmly invited to our Sunday Harvest Field meeting tomorrow at 9:00 AM. Come and be blessed! - Living Faith Church',
     channels: ['sms', 'whatsapp'],
     active: true,
     nextTrigger: daysFromNow(2, 10),
@@ -219,7 +221,7 @@ const SEED_EVENTS: ScheduledEvent[] = [
     time: '17:00',
     leadTimeHours: [24, 2],
     messageTemplate:
-      'Dear {name}, our midweek service holds this Wednesday at 5:30 PM. Come hungry for the Word! — Living Faith Church',
+      'Dear {name}, our midweek service holds this Wednesday at 5:30 PM. Come hungry for the Word! - Living Faith Church',
     channels: ['sms', 'whatsapp'],
     active: true,
     nextTrigger: daysFromNow(5, 17),
@@ -234,7 +236,7 @@ const SEED_EVENTS: ScheduledEvent[] = [
     date: daysFromNow(7).slice(0, 10),
     leadTimeHours: [48, 24],
     messageTemplate:
-      'Dear {name}, our monthly prayer meeting holds on the 1st. Come prepared to seek the face of God! — Living Faith Church',
+      'Dear {name}, our monthly prayer meeting holds on the 1st. Come prepared to seek the face of God! - Living Faith Church',
     channels: ['sms', 'whatsapp'],
     active: true,
     nextTrigger: daysFromNow(5, 8),
@@ -248,7 +250,7 @@ const SEED_EVENTS: ScheduledEvent[] = [
     time: '06:00',
     leadTimeHours: [1],
     messageTemplate:
-      "Good morning {name}! Start your day with God's Word. Our devotional guide is available — be blessed! — Living Faith Church",
+      "Good morning {name}! Start your day with God's Word. Our devotional guide is available. Be blessed! - Living Faith Church",
     channels: ['whatsapp'],
     active: false,
     nextTrigger: daysFromNow(1, 6),
@@ -302,7 +304,7 @@ export const store = {
   getAttendance: (): AttendanceRecord[] => load<AttendanceRecord>('fp_attendance', seedAttendance()),
   saveAttendance: (a: AttendanceRecord[]) => save('fp_attendance', a),
 
-  getWelcomeTemplates: (): WelcomeTemplate[] => load<WelcomeTemplate>('fp_welcome_templates', SEED_WELCOME),
+  getWelcomeTemplates: (): WelcomeTemplate[] => withCurrentBuiltIns(load<WelcomeTemplate>('fp_welcome_templates', SEED_WELCOME)),
   saveWelcomeTemplates: (t: WelcomeTemplate[]) => save('fp_welcome_templates', t),
 
   getContacts: (): Contact[] => load<Contact>('fp_contacts', SEED_CONTACTS),

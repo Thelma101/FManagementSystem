@@ -3,6 +3,8 @@ import type { ScheduledEvent, AuthUser, DayOfWeek } from '../../types';
 import { store } from '../../lib/store';
 import { canManageSchedules } from '../../lib/permissions';
 import { useToast } from '../ui/Toast';
+import SmsCounter from '../ui/SmsCounter';
+import { toGsm } from '../../lib/sms';
 
 interface Props {
   user: AuthUser;
@@ -401,7 +403,12 @@ export default function ScheduleModule({ user, events, onEventsChange }: Props) 
                   </label>
                   <textarea required rows={4} className="input" value={form.messageTemplate}
                     onChange={(e) => setForm((f) => ({ ...f, messageTemplate: e.target.value }))}
-                    placeholder="Dear {name}, you are warmly invited to… — {church}" />
+                    placeholder="Dear {name}, you are warmly invited to... - {church}" />
+                  <SmsCounter
+                    text={form.messageTemplate}
+                    hasPlaceholders={/\{(name|church)\}/.test(form.messageTemplate)}
+                    onFix={() => setForm((f) => ({ ...f, messageTemplate: toGsm(f.messageTemplate) }))}
+                  />
                 </div>
               </div>
 

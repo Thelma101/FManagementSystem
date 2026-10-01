@@ -6,6 +6,7 @@ import path from 'node:path'
 import siteConfiguration from './.figma/make/site.json'
 import { handleWhatsAppCheck, waConfigStatus, type WaEnv } from './server/whatsappCheck'
 import { handleAdminUsers, type AdminEnv } from './server/adminUsers'
+import { handleSms, type SmsEnv } from './server/smsSend'
 
 
 // Vite config — https://vitejs.dev/config/
@@ -13,7 +14,7 @@ export default defineConfig(({ mode }) => {
   // .figma/make/deploy-preview passes `--mode development` for cached-preview builds.
   const emitSourcemaps = mode === 'development'
   // Empty prefix loads non-VITE_ vars too; they stay on the server and are never bundled.
-  const serverEnv = { ...loadEnv(mode, process.cwd(), ''), ...process.env } as WaEnv & AdminEnv
+  const serverEnv = { ...loadEnv(mode, process.cwd(), ''), ...process.env } as ServerEnv
 
   return {
     // NEXT_PUBLIC_ is what the Supabase ↔ Vercel integration creates; only these prefixes reach the browser.
@@ -54,11 +55,13 @@ react(),
   }
 })
 
+type ServerEnv = WaEnv & AdminEnv & SmsEnv
+
 /** Serves the /api/* serverless routes during `vite dev` and `vite preview`. */
-function serverApi(env: WaEnv & AdminEnv): Plugin {
+function serverApi(env: ServerEnv): Plugin {
   const middleware: Connect.NextHandleFunction = (req, res, next) => {
     const route = req.url?.split('?')[0]
-    if (route !== '/api/whatsapp/check' && route !== '/api/admin/users') return next()
+    if (route !== '/api/whatsapp/check' && route !== '/api/admin/users' && route !== '/api/sms/send') return next()
 
     const send = (status: number, body: unknown) => {
       res.statusCode = status
@@ -69,6 +72,12 @@ function serverApi(env: WaEnv & AdminEnv): Plugin {
     if (route === '/api/whatsapp/check' && req.method === 'GET') {
       const cfg = waConfigStatus(env)
       return send(200, { configured: cfg.configured, provider: cfg.provider })
+    }
+    if (route === '/api/sms/send' && req.method === 'GET') {
+      handleSms('GET', req.headers.authorization, {}, env)
+        .then((r) => send(r.status, r.body))
+        .catch((err) => send(500, { error: err instanceof Error ? err.message : 'Server error' }))
+      return
     }
 
     let raw = ''
@@ -83,6 +92,10 @@ function serverApi(env: WaEnv & AdminEnv): Plugin {
       try {
         if (route === '/api/admin/users') {
           const result = await handleAdminUsers(req.method, req.headers.authorization, body, env)
+          return send(result.status, result.body)
+        }
+        if (route === '/api/sms/send') {
+          const result = await handleSms(req.method, req.headers.authorization, body, env)
           return send(result.status, result.body)
         }
         if (req.method !== 'POST') return send(405, { error: 'Method not allowed' })

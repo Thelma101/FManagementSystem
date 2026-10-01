@@ -272,14 +272,19 @@ export function onPasswordRecovery(fn: () => void): () => void {
   return () => data.subscription.unsubscribe();
 }
 
+/** Bearer token for the server endpoints in /api. */
+export async function accessToken(): Promise<string | null> {
+  const { data } = await client().auth.getSession();
+  return data.session?.access_token ?? null;
+}
+
 // ── User management (server endpoint, secret key stays on the server) ────────
 
 export async function adminUsers(
   method: 'POST' | 'PATCH' | 'DELETE',
   body: Record<string, unknown>,
 ): Promise<{ user?: AuthUser; error?: string }> {
-  const { data } = await client().auth.getSession();
-  const token = data.session?.access_token;
+  const token = await accessToken();
   if (!token) return { error: 'Your session has expired. Please sign in again.' };
   try {
     const res = await fetch('/api/admin/users', {

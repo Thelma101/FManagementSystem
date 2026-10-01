@@ -6,6 +6,8 @@ import { COMMITMENT_LABEL, SERVICE_OPTIONS, SPECIAL_EVENTS, fmtDate, todayIso } 
 import { PLACEHOLDERS, fillWelcome, type WelcomeChannel, type WelcomeOptions } from '../../lib/welcome';
 import PhoneInput from '../ui/PhoneInput';
 import { useToast } from '../ui/Toast';
+import SmsCounter from '../ui/SmsCounter';
+import { toGsm } from '../../lib/sms';
 
 export const TAG_OPTIONS = ['harvest-field', 'soul-winning', 'follow-up', 'youth', 'wsf', 'new-convert'];
 
@@ -446,6 +448,7 @@ export default function ContactFormModal({
                       <textarea className="input" rows={4} value={welcomeText}
                         onChange={(e) => { setWelcomeText(e.target.value); if (templateId !== 'custom' && templates.find((t) => t.id === templateId)?.text !== e.target.value) setTemplateId('custom'); }}
                         placeholder="Dear {name}, it was a joy meeting you at {location}…" />
+                      <SmsCounter text={welcomePreview} onFix={() => setWelcomeText(toGsm(welcomeText))} />
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginTop: '5px', flexWrap: 'wrap' }}>
                         <p style={{ fontSize: '11.5px', color: 'var(--text-3)' }}>
                           Placeholders: {PLACEHOLDERS.map((p) => (
@@ -465,9 +468,6 @@ export default function ContactFormModal({
                     {welcomeText.trim() && (
                       <div style={{ background: '#dcf8c6', borderRadius: '12px 12px 4px 12px', padding: '10px 13px', fontSize: '13px', lineHeight: 1.6, color: '#1a1a1a' }}>
                         {welcomePreview}
-                        <p style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '6px' }}>
-                          {welcomePreview.length} characters{welcomePreview.length > 160 ? ' — an SMS will be sent in multiple parts' : ''}
-                        </p>
                       </div>
                     )}
                   </>

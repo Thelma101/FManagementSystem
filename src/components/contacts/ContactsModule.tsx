@@ -7,6 +7,8 @@ import { canDeleteRecords } from '../../lib/permissions';
 import { fmtDate, serviceLabel } from '../../lib/services';
 import { fillWelcome, type WelcomeOptions } from '../../lib/welcome';
 import { useToast } from '../ui/Toast';
+import SmsCounter from '../ui/SmsCounter';
+import { toGsm } from '../../lib/sms';
 import ContactFormModal, { TAG_OPTIONS, WaBadge } from './ContactFormModal';
 
 interface Props {
@@ -42,7 +44,7 @@ function SendModal({ contact, user, onClose, onSent }: {
       contactPhone: contact.phone,
       channel,
       content: msg,
-      status: result.success ? 'delivered' : 'failed',
+      status: result.status,
       sentAt: new Date().toISOString(),
       sentBy: user.name,
       kind: 'direct',
@@ -77,9 +79,7 @@ function SendModal({ contact, user, onClose, onSent }: {
               placeholder={`Dear ${contact.name.split(' ')[0]}, you are warmly invited…`}
               autoFocus
             />
-            <p style={{ fontSize: '11.5px', color: msg.length > 160 ? 'var(--amber)' : 'var(--text-3)', textAlign: 'right', marginTop: '3px' }}>
-              {msg.length} chars{msg.length > 160 ? ' — may split into 2 SMS' : ''}
-            </p>
+            <SmsCounter text={msg} onFix={() => setMsg(toGsm(msg))} />
           </div>
           {!canWa && contact.whatsappStatus !== 'unknown' && (
             <p className="alert alert-navy">WhatsApp not detected on this number — SMS only.</p>
@@ -224,7 +224,7 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
       contactPhone: current.phone,
       channel,
       content: text,
-      status: result.success ? 'delivered' : 'failed',
+      status: result.status,
       sentAt: now,
       sentBy: user.name,
       kind: 'welcome',
@@ -276,7 +276,7 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
 
   function handleSent(log: MessageLog) {
     addLog(log);
-    if (log.status === 'delivered') updateContact(log.contactId, { lastContacted: log.sentAt });
+    if (log.status === 'delivered' || log.status === 'sent') updateContact(log.contactId, { lastContacted: log.sentAt });
   }
 
   const editContact = editId ? contacts.find((c) => c.id === editId) : undefined;

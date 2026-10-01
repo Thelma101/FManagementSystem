@@ -42,7 +42,7 @@ export default function Dashboard({ user, contacts, logs, events, onNavigate }: 
   const active      = contacts.filter((c) => !c.archived);
   const waActive    = active.filter((c) => c.whatsappStatus === 'active').length;
   const unverified  = active.filter((c) => c.whatsappStatus === 'unknown').length;
-  const delivered   = logs.filter((l) => l.status === 'delivered').length;
+  const delivered   = logs.filter((l) => l.status === 'delivered' || l.status === 'sent').length;
   const activeScheds = events.filter((e) => e.active).length;
 
   const recentLogs = [...logs]
@@ -169,7 +169,7 @@ export default function Dashboard({ user, contacts, logs, events, onNavigate }: 
                     </p>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <span className={`badge ${log.status === 'delivered' ? 'badge-green' : log.status === 'failed' ? 'badge-red' : 'badge-amber'}`} style={{ fontSize: '11px' }}>
+                    <span className={`badge ${log.status === 'delivered' ? 'badge-green' : log.status === 'failed' ? 'badge-red' : log.status === 'sent' ? 'badge-blue' : 'badge-amber'}`} style={{ fontSize: '11px' }}>
                       {log.status}
                     </span>
                     <p style={{ fontSize: '11px', color: 'var(--text-4)', marginTop: '3px' }}>{fmtRelative(log.sentAt)}</p>

@@ -48,6 +48,15 @@ WA_CHECK_API_KEY=your-key
 
 Without a provider the portal runs in **demo mode**: checks are simulated (even last digit → on WhatsApp) and labelled "demo" in the contacts list. The Users page shows whether a provider is connected.
 
+## SMS sending (eBulkSMS)
+
+Real SMS goes out through [eBulkSMS](https://www.ebulksms.com/pages/json-api) via the server endpoint `/api/sms/send`, so the API key never reaches the browser. Set `EBULKSMS_USERNAME`, `EBULKSMS_API_KEY`, `EBULKSMS_SENDER` (max 11 characters) and `EBULKSMS_DND` (see `.env.example`). The route only accepts signed-in portal members, so it also needs the Supabase server variables; in demo mode SMS stays simulated.
+
+- Messages that eBulkSMS accepts are logged as **sent**; simulated ones as **delivered**.
+- Every message box shows a live SMS counter. A plain-text SMS page holds 160 characters; one special character (such as `—` or curly quotes) drops that to 70. **Fix characters** swaps them for plain ones, and the server does the same before sending.
+- eBulkSMS charges 4 units per SMS page. Messaging shows the units left. A broadcast stops at the first account error (such as running out of credit).
+- WhatsApp sending is still simulated until a WhatsApp provider is connected.
+
 ## Database & sign-in (Supabase)
 
 When the Supabase variables are set (see `.env.example`), the portal stores everything in Supabase and uses Supabase Auth for sign-in. Without them it runs in **demo mode** using browser storage and the demo logins below.
@@ -70,7 +79,7 @@ When the Supabase variables are set (see `.env.example`), the portal stores ever
 - React 19 + Vite 8 + TypeScript, Tailwind CSS v4
 - `libphonenumber-js` (phone validation), `write-excel-file`, `jspdf` + `jspdf-autotable`, `docx` (report exports, loaded on demand)
 - Supabase (Postgres + Auth) via `@supabase/supabase-js`; demo mode falls back to browser `localStorage`
-- Serverless functions in `api/` (WhatsApp check, user management), Vercel-style; the same handlers run inside the Vite dev/preview server
+- Serverless functions in `api/` (WhatsApp check, user management, SMS sending), Vercel-style; the same handlers run inside the Vite dev/preview server
 
 ## Going live
 
@@ -78,7 +87,7 @@ The portal is a web application: people use it in a browser (phone or laptop) at
 
 1. **Hosting (frontend + API):** Vercel or Netlify — deploy straight from this GitHub repo; free tier is enough to start.
 2. **Database + logins:** Supabase (connected — see above) so every user sees the same contacts, attendance and reports.
-3. **Messaging:** an SMS provider (Termii, Africa's Talking, Twilio) and WhatsApp via the Meta WhatsApp Cloud API or a partner (BSP).
+3. **Messaging:** SMS through eBulkSMS (connected — see above); WhatsApp via the Meta WhatsApp Cloud API or a partner (BSP).
 4. **WhatsApp number check:** WA Lookup or 2Chat key set as an environment variable.
 5. **Scheduled reminders:** a server-side cron job (Vercel Cron / Supabase scheduled functions) so reminders go out even when nobody has the portal open.
 
