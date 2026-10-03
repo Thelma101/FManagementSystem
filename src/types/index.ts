@@ -46,6 +46,7 @@ export interface Contact {
   salvationPlace?: string;
   baptised?: boolean;
   baptismDate?: string; // YYYY-MM-DD
+  baptismPlace?: string;
   inCellFellowship?: boolean;
   cellName?: string;
 
@@ -54,7 +55,36 @@ export interface Contact {
   committedServices?: ServiceType[];
   committedSpecialEvent?: string;
 
+  /** Values for admin-defined fields, keyed by ContactField id. */
+  custom?: Record<string, CustomValue>;
+
   welcomeSentAt?: string;
+}
+
+export type FieldType = 'yesno' | 'text' | 'date' | 'choice';
+
+/** An extra contact field added by an admin, e.g. "Bible school" (yes/no + date + place). */
+export interface ContactField {
+  id: string;
+  label: string;
+  type: FieldType;
+  /** Yes/no fields: also ask when (shown once answered Yes). */
+  askDate?: boolean;
+  /** Yes/no fields: also ask where (shown once answered Yes). */
+  askPlace?: boolean;
+  /** Choice fields: the allowed answers. */
+  options?: string[];
+  position: number;
+  /** Hidden from forms and imports; existing answers are kept. */
+  archived?: boolean;
+  createdBy?: string;
+}
+
+export interface CustomValue {
+  /** boolean for yes/no fields, string (date as YYYY-MM-DD) for the others. */
+  value?: boolean | string;
+  date?: string;
+  place?: string;
 }
 
 export type MessageChannel = 'sms' | 'whatsapp' | 'both';

@@ -37,6 +37,11 @@ export function canDeleteRecords(user: AuthUser): boolean {
   return user.role === 'superadmin' || user.role === 'admin';
 }
 
+/** Adding, renaming or hiding the extra contact fields. */
+export function canManageFields(user: AuthUser): boolean {
+  return user.role === 'superadmin' || user.role === 'admin';
+}
+
 export function canManageSchedules(user: AuthUser): boolean {
   return user.role === 'superadmin' || user.role === 'admin';
 }

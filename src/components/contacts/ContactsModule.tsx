@@ -1,15 +1,18 @@
-import { useState } from 'react';
-import type { Contact, AuthUser, MessageLog, WhatsAppStatus } from '../../types';
+import { useMemo, useState } from 'react';
+import type { Contact, ContactField, AuthUser, MessageLog, WhatsAppStatus } from '../../types';
 import { store } from '../../lib/store';
 import { sendMessage } from '../../lib/mockApi';
 import { checkWhatsApp, providerName } from '../../lib/whatsapp';
-import { canDeleteRecords } from '../../lib/permissions';
+import { canDeleteRecords, canManageFields } from '../../lib/permissions';
+import { activeFields } from '../../lib/customFields';
 import { fmtDate, serviceLabel } from '../../lib/services';
 import { fillWelcome, type WelcomeOptions } from '../../lib/welcome';
 import { useToast } from '../ui/Toast';
 import SmsCounter from '../ui/SmsCounter';
 import { toGsm } from '../../lib/sms';
 import ContactFormModal, { TAG_OPTIONS, WaBadge } from './ContactFormModal';
+import FieldsManager from './FieldsManager';
+import ImportContactsModal from './ImportContactsModal';
 
 interface Props {
   user: AuthUser;
@@ -18,7 +21,8 @@ interface Props {
   onLogAdded: (l: MessageLog) => void;
 }
 
-type SpiritualFilter = '' | 'born-again' | 'not-born-again' | 'baptised' | 'not-baptised' | 'cell' | 'no-cell';
+/** `yes:<fieldId>` / `no:<fieldId>` filter on an admin-defined yes/no field. */
+type SpiritualFilter = '' | 'born-again' | 'not-born-again' | 'baptised' | 'not-baptised' | 'cell' | 'no-cell' | `yes:${string}` | `no:${string}`;
 
 // ── Send Modal ──────────────────────────────────────────────────────────────
 function SendModal({ contact, user, onClose, onSent }: {
@@ -103,12 +107,15 @@ function SendModal({ contact, user, onClose, onSent }: {
   );
 }
 
-function SpiritualBadges({ c }: { c: Contact }) {
+function SpiritualBadges({ c, fields }: { c: Contact; fields: ContactField[] }) {
   const items: { label: string; cls: string }[] = [];
   if (c.bornAgain === true) items.push({ label: 'Born again', cls: 'badge-green' });
   if (c.bornAgain === false) items.push({ label: 'Not born again', cls: 'badge-gray' });
   if (c.baptised) items.push({ label: 'Baptised', cls: 'badge-blue' });
   if (c.inCellFellowship) items.push({ label: 'WSF', cls: 'badge-gold' });
+  for (const f of fields) {
+    if (f.type === 'yesno' && c.custom?.[f.id]?.value === true) items.push({ label: f.label, cls: 'badge-navy' });
+  }
   if (items.length === 0) return <span style={{ color: 'var(--text-4)', fontSize: '12.5px' }}>Not recorded</span>;
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
@@ -129,11 +136,20 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
   const [filterWa, setFilterWa] = useState<WhatsAppStatus | ''>('');
   const [filterSpiritual, setFilterSpiritual] = useState<SpiritualFilter>('');
   const [showArchived, setShowArchived] = useState(false);
+  const [fieldsOpen, setFieldsOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [allFields, setAllFields] = useState(() => store.getFields());
 
   const canDelete = canDeleteRecords(user);
+  const fields = activeFields(allFields);
+  const yesNoFields = fields.filter((f) => f.type === 'yesno');
   const active = contacts.filter((c) => !c.archived);
   const archived = contacts.filter((c) => c.archived);
   const pool = showArchived ? archived : active;
+  const tagOptions = useMemo(
+    () => [...new Set([...TAG_OPTIONS, ...contacts.flatMap((c) => c.tags)])].sort(),
+    [contacts],
+  );
 
   const filtered = pool.filter((c) => {
     const q = search.toLowerCase();
@@ -147,6 +163,12 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
       case 'not-baptised': if (c.baptised) return false; break;
       case 'cell': if (!c.inCellFellowship) return false; break;
       case 'no-cell': if (c.inCellFellowship) return false; break;
+      default:
+        if (filterSpiritual) {
+          const [want, fieldId] = filterSpiritual.split(':');
+          const yes = c.custom?.[fieldId]?.value === true;
+          if (want === 'yes' ? !yes : yes) return false;
+        }
     }
     return true;
   });
@@ -299,6 +321,10 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
                 ↻ Verify {unverified.length}
               </button>
             )}
+            {canManageFields(user) && (
+              <button className="btn btn-outline" onClick={() => setFieldsOpen(true)} title="Add questions such as Bible school">Fields</button>
+            )}
+            <button className="btn btn-outline" onClick={() => setImportOpen(true)}>Import</button>
             <button className="btn btn-primary" onClick={() => setAddOpen(true)}>+ Add contact</button>
           </div>
         </div>
@@ -321,10 +347,16 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
             <option value="not-baptised">Not baptised</option>
             <option value="cell">In a cell fellowship</option>
             <option value="no-cell">Not in a cell fellowship</option>
+            {yesNoFields.map((f) => (
+              <optgroup key={f.id} label={f.label}>
+                <option value={`yes:${f.id}`}>{f.label}: yes</option>
+                <option value={`no:${f.id}`}>{f.label}: no / unknown</option>
+              </optgroup>
+            ))}
           </select>
           <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)} className="input" style={{ width: 'auto', minWidth: '120px' }}>
             <option value="">All tags</option>
-            {TAG_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+            {tagOptions.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
           <select value={filterWa} onChange={(e) => setFilterWa(e.target.value as WhatsAppStatus | '')} className="input" style={{ width: 'auto', minWidth: '130px' }}>
             <option value="">All WhatsApp</option>
@@ -398,7 +430,7 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
                     <p style={{ color: 'var(--text-2)', maxWidth: '170px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.metLocation || '—'}</p>
                     <p style={{ color: 'var(--text-3)' }}>{c.metDate ? fmtDate(c.metDate) : fmtDate(c.addedAt)}</p>
                   </td>
-                  <td><SpiritualBadges c={c} /></td>
+                  <td><SpiritualBadges c={c} fields={yesNoFields} /></td>
                   <td style={{ fontSize: '12.5px', color: 'var(--text-2)' }}>
                     {c.attendanceCommitment === 'yes' && c.committedServices?.length
                       ? c.committedServices.map((s) => serviceLabel(s, c.committedSpecialEvent)).join(', ')
@@ -455,6 +487,25 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
 
       {sendTarget && (
         <SendModal contact={sendTarget} user={user} onClose={() => setSendTarget(null)} onSent={handleSent} />
+      )}
+
+      {fieldsOpen && (
+        <FieldsManager
+          user={user}
+          onClose={() => setFieldsOpen(false)}
+          onChange={(next) => {
+            setAllFields(next);
+            if (filterSpiritual.includes(':') && !activeFields(next).some((f) => filterSpiritual.endsWith(':' + f.id))) setFilterSpiritual('');
+          }}
+        />
+      )}
+
+      {importOpen && (
+        <ImportContactsModal
+          user={user}
+          onClose={() => setImportOpen(false)}
+          onImported={(all) => onContactsChange(all)}
+        />
       )}
     </div>
   );

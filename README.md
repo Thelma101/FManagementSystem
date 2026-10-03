@@ -10,9 +10,11 @@ Living Faith Church **Communications Portal** — a web app for recording souls 
   - International phone validation (all country codes via libphonenumber)
   - Duplicate detection — warns if the number was saved before (including archived contacts) and links to the existing record
   - Where and when the person was met
-  - Spiritual status: born again (date + place of salvation), baptised (date), Cell Fellowship (WSF) membership
+  - Spiritual status: born again (date + place of salvation), baptised (date + place), Cell Fellowship (WSF) membership
   - Service commitment: will they attend, and which services (Sunday, Midweek, WSF, Spiritual Emphasis, Special Events)
   - Tags and notes
+  - **Custom fields** — Admins add extra questions from Contacts → Fields: Yes/No (optionally asking the date and place when Yes, e.g. Bible school), text, date, or pick-from-a-list. They appear on the contact form, as filters and badges, in imports and in the contacts register report. Hiding a field keeps the answers already saved.
+  - **Bulk import** — Contacts → Import takes an Excel (.xlsx) or CSV file (up to 5,000 rows). Columns are matched automatically and can be changed; every row is checked before saving (invalid phones and numbers already saved are skipped). A template with all fields can be downloaded from the import window.
   - WhatsApp number verification (third-party provider, see below)
 - **Welcome messages** — sent automatically when a contact is added; pick a saved template or write a custom message each time. Placeholders: `{name}`, `{location}`, `{date}`, `{service}`
 - **Attendance** — weekly register of who attended which service type, including special events (Liberation Mandate Anniversary, AYAC, Shiloh, or any other)
@@ -25,8 +27,8 @@ Living Faith Church **Communications Portal** — a web app for recording souls 
 | Role | Can do | Can add / remove |
 |------|--------|------------------|
 | **Super Admin** | Everything | Super Admins, Admins, Authorized users |
-| **Admin** | Contacts, attendance, messaging, schedules, reports, delete records | Authorized users only |
-| **Authorized user** | Add contacts, send messages, record attendance, view reports | Nobody |
+| **Admin** | Contacts, attendance, messaging, schedules, reports, delete records, contact fields | Authorized users only |
+| **Authorized user** | Add and import contacts, send messages, record attendance, view reports | Nobody |
 
 Nobody can change or revoke their own account. Keep at least two Super Admins so the portal can't be locked out.
 
@@ -109,7 +111,7 @@ src/
   App.tsx                 # Shell, auth gate, mobile nav
   components/
     auth/                 # Login + verification code
-    contacts/             # Contacts list + add/edit form (duplicates, welcome message)
+    contacts/             # Contacts list, add/edit form (duplicates, welcome message), custom fields, import
     attendance/           # Weekly service attendance register
     reports/              # Reports + Excel/PDF/Word export
     messaging/            # Compose & history

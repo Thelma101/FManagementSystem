@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import type { AttendanceCommitment, AuthUser, Contact, ServiceType, WhatsAppStatus } from '../../types';
+import type { AttendanceCommitment, AuthUser, Contact, CustomValue, ServiceType, WhatsAppStatus } from '../../types';
+import { activeFields, cleanCustom } from '../../lib/customFields';
 import { store } from '../../lib/store';
 import { parsePhone } from '../../lib/phone';
 import { COMMITMENT_LABEL, SERVICE_OPTIONS, SPECIAL_EVENTS, fmtDate, todayIso } from '../../lib/services';
@@ -44,11 +45,13 @@ type FormState = {
   salvationPlace: string;
   baptised?: boolean;
   baptismDate: string;
+  baptismPlace: string;
   inCellFellowship?: boolean;
   cellName: string;
   attendanceCommitment?: AttendanceCommitment;
   committedServices: ServiceType[];
   committedSpecialEvent: string;
+  custom: Record<string, CustomValue>;
 };
 
 function initialForm(c?: Contact): FormState {
@@ -64,11 +67,13 @@ function initialForm(c?: Contact): FormState {
     salvationPlace: c?.salvationPlace ?? '',
     baptised: c?.baptised,
     baptismDate: c?.baptismDate ?? '',
+    baptismPlace: c?.baptismPlace ?? '',
     inCellFellowship: c?.inCellFellowship,
     cellName: c?.cellName ?? '',
     attendanceCommitment: c?.attendanceCommitment,
     committedServices: c?.committedServices ? [...c.committedServices] : [],
     committedSpecialEvent: c?.committedSpecialEvent ?? '',
+    custom: { ...(c?.custom ?? {}) },
   };
 }
 
@@ -100,8 +105,12 @@ export default function ContactFormModal({
   const [welcomeChannel, setWelcomeChannel] = useState<WelcomeChannel>('auto');
 
   const users = useMemo(() => store.getUsers(), []);
+  const allFields = useMemo(() => store.getFields(), []);
+  const fields = activeFields(allFields);
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => setForm((f) => ({ ...f, [key]: value }));
+  const setCustom = (id: string, patch: CustomValue) =>
+    setForm((f) => ({ ...f, custom: { ...f.custom, [id]: { ...f.custom[id], ...patch } } }));
 
   const duplicate = form.phone
     ? contacts.find((c) => c.phone === form.phone && c.id !== contact?.id)
@@ -197,6 +206,8 @@ export default function ContactFormModal({
       salvationPlace: form.bornAgain ? form.salvationPlace.trim() || undefined : undefined,
       baptised: form.baptised,
       baptismDate: form.baptised ? form.baptismDate || undefined : undefined,
+      baptismPlace: form.baptised ? form.baptismPlace.trim() || undefined : undefined,
+      custom: cleanCustom(allFields, form.custom),
       inCellFellowship: form.inCellFellowship,
       cellName: form.inCellFellowship ? form.cellName.trim() || undefined : undefined,
       attendanceCommitment: form.attendanceCommitment,
@@ -340,6 +351,11 @@ export default function ContactFormModal({
                     <label className="label">Date of baptism</label>
                     <input type="date" className="input" value={form.baptismDate} max={todayIso()} onChange={(e) => set('baptismDate', e.target.value)} />
                   </div>
+                  <div>
+                    <label className="label">Where they were baptised</label>
+                    <input className="input" value={form.baptismPlace} onChange={(e) => set('baptismPlace', e.target.value)}
+                      placeholder="e.g. Canaan Land, Ota" />
+                  </div>
                 </div>
               )}
 
@@ -395,6 +411,56 @@ export default function ContactFormModal({
                 </>
               )}
             </div>
+
+            {/* ── Admin-defined fields ─────────────────────────────────── */}
+            {fields.length > 0 && (
+              <div className="form-section">
+                <p className="form-section-title">More details</p>
+                {fields.map((f) => {
+                  const v = form.custom[f.id] ?? {};
+                  if (f.type === 'yesno') {
+                    return (
+                      <div key={f.id} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        <div className="field-row">
+                          <span>{f.label}?</span>
+                          <YesNo value={typeof v.value === 'boolean' ? v.value : undefined} onChange={(val) => setCustom(f.id, { value: val })} />
+                        </div>
+                        {v.value === true && (f.askDate || f.askPlace) && (
+                          <div className="grid-2">
+                            {f.askDate && (
+                              <div>
+                                <label className="label">{f.label}: date</label>
+                                <input type="date" className="input" value={v.date ?? ''} max={todayIso()} onChange={(e) => setCustom(f.id, { date: e.target.value })} />
+                              </div>
+                            )}
+                            {f.askPlace && (
+                              <div>
+                                <label className="label">{f.label}: place</label>
+                                <input className="input" value={v.place ?? ''} onChange={(e) => setCustom(f.id, { place: e.target.value })} />
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={f.id}>
+                      <label className="label">{f.label}</label>
+                      {f.type === 'choice' ? (
+                        <select className="input" value={typeof v.value === 'string' ? v.value : ''} onChange={(e) => setCustom(f.id, { value: e.target.value })}>
+                          <option value="">Not recorded</option>
+                          {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
+                        </select>
+                      ) : (
+                        <input type={f.type === 'date' ? 'date' : 'text'} className="input" value={typeof v.value === 'string' ? v.value : ''}
+                          onChange={(e) => setCustom(f.id, { value: e.target.value })} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* ── Tags & notes ──────────────────────────────────────────── */}
             <div className="form-section">

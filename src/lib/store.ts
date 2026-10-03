@@ -2,6 +2,7 @@ import type {
   AttendanceRecord,
   AuthUser,
   Contact,
+  ContactField,
   MessageLog,
   ScheduledEvent,
   WelcomeTemplate,
@@ -162,6 +163,11 @@ function withCurrentBuiltIns(list: WelcomeTemplate[]): WelcomeTemplate[] {
   });
 }
 
+// ── Extra contact fields (admins can add more) ────────────────────────────────
+const SEED_FIELDS: ContactField[] = [
+  { id: 'f-bible-school', label: 'Bible school', type: 'yesno', askDate: true, askPlace: true, position: 1, createdBy: 'Portal Admin' },
+];
+
 // ── Seed message logs ─────────────────────────────────────────────────────────
 const SEED_LOGS: MessageLog[] = [
   {
@@ -261,7 +267,8 @@ const SEED_EVENTS: ScheduledEvent[] = [
 // ── Storage helpers ───────────────────────────────────────────────────────────
 // Demo mode keeps everything in localStorage. Cloud mode (Supabase) keeps an
 // in-memory copy loaded at sign-in and hands every save to the cloud sync.
-export type CollectionKey = 'fp_users' | 'fp_contacts' | 'fp_logs' | 'fp_events' | 'fp_attendance' | 'fp_welcome_templates';
+export type CollectionKey =
+  | 'fp_users' | 'fp_contacts' | 'fp_logs' | 'fp_events' | 'fp_attendance' | 'fp_welcome_templates' | 'fp_fields';
 type CloudSave = (key: CollectionKey, prev: unknown[], next: unknown[]) => void;
 
 let cloud: { data: Record<CollectionKey, unknown[]>; onSave: CloudSave } | null = null;
@@ -306,6 +313,9 @@ export const store = {
 
   getWelcomeTemplates: (): WelcomeTemplate[] => withCurrentBuiltIns(load<WelcomeTemplate>('fp_welcome_templates', SEED_WELCOME)),
   saveWelcomeTemplates: (t: WelcomeTemplate[]) => save('fp_welcome_templates', t),
+
+  getFields: (): ContactField[] => load<ContactField>('fp_fields', SEED_FIELDS),
+  saveFields: (f: ContactField[]) => save('fp_fields', f),
 
   getContacts: (): Contact[] => load<Contact>('fp_contacts', SEED_CONTACTS),
   saveContacts: (c: Contact[]) => save('fp_contacts', c),

@@ -25,7 +25,7 @@ const TABLES: Record<Exclude<CollectionKey, 'fp_users'>, TableSpec> = {
       'id', 'name', 'phone', 'whatsappStatus', 'whatsappCheckedAt', 'whatsappCheckSource', 'addedBy', 'addedAt',
       'tags', 'notes', 'lastContacted', 'archived', 'metLocation', 'metDate', 'bornAgain', 'salvationDate',
       'salvationPlace', 'baptised', 'baptismDate', 'inCellFellowship', 'cellName', 'attendanceCommitment',
-      'committedServices', 'committedSpecialEvent', 'welcomeSentAt',
+      'committedServices', 'committedSpecialEvent', 'welcomeSentAt', 'baptismPlace', 'custom',
     ],
     dates: ['whatsappCheckedAt', 'addedAt', 'lastContacted', 'metDate', 'salvationDate', 'baptismDate', 'welcomeSentAt'],
     order: 'added_at',
@@ -56,6 +56,12 @@ const TABLES: Record<Exclude<CollectionKey, 'fp_users'>, TableSpec> = {
     table: 'welcome_templates',
     columns: ['id', 'label', 'text', 'builtIn'],
     order: 'id',
+    ascending: true,
+  },
+  fp_fields: {
+    table: 'contact_fields',
+    columns: ['id', 'label', 'type', 'askDate', 'askPlace', 'options', 'position', 'archived', 'createdBy'],
+    order: 'position',
     ascending: true,
   },
 };

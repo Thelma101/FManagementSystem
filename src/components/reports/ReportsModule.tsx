@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import type { AttendanceRecord, Contact } from '../../types';
+import type { AttendanceRecord, Contact, ContactField } from '../../types';
 import { store } from '../../lib/store';
+import { activeFields, formatValue } from '../../lib/customFields';
 import {
   COMMITMENT_LABEL, SERVICE_OPTIONS, addWeeks, fmtDate, fmtWeekRange, fromIsoDate, serviceLabel, toIsoDate, weekStartOf,
 } from '../../lib/services';
@@ -32,7 +33,7 @@ function committedText(c: Contact) {
   return list.length ? list.join(', ') : 'Yes';
 }
 
-function buildReport(type: ReportType, weeks: string[], contacts: Contact[], records: AttendanceRecord[]): Report {
+function buildReport(type: ReportType, weeks: string[], contacts: Contact[], records: AttendanceRecord[], fields: ContactField[]): Report {
   const period = weeks.length === 1 ? fmtWeekRange(weeks[0]) : `${fmtWeekRange(weeks[0]).split(' – ')[0]} – ${fmtWeekRange(weeks[weeks.length - 1]).split(' – ')[1]}`;
   const weekSet = new Set(weeks);
   const inRange = records.filter((r) => weekSet.has(r.weekStart) && contacts.some((c) => c.id === r.contactId));
@@ -134,6 +135,7 @@ function buildReport(type: ReportType, weeks: string[], contacts: Contact[], rec
   }
 
   const pct = (n: number) => (contacts.length ? `${Math.round((n / contacts.length) * 100)}%` : '—');
+  const yesNoFields = fields.filter((f) => f.type === 'yesno');
   return {
     title: 'Contacts Register',
     subtitle: `${contacts.length} contacts`,
@@ -142,13 +144,19 @@ function buildReport(type: ReportType, weeks: string[], contacts: Contact[], rec
       { label: 'Baptised', value: pct(contacts.filter((c) => c.baptised).length) },
       { label: 'In a Cell Fellowship', value: pct(contacts.filter((c) => c.inCellFellowship).length) },
       { label: 'Committed to attend', value: pct(contacts.filter((c) => c.attendanceCommitment === 'yes').length) },
+      ...yesNoFields.map((f) => ({ label: f.label, value: pct(contacts.filter((c) => c.custom?.[f.id]?.value === true).length) })),
     ],
     columns: [
       { header: 'Name', width: 22 }, { header: 'Phone', width: 17 }, { header: 'WhatsApp', width: 10 },
       { header: 'Where met', width: 20 }, { header: 'Date met', width: 12 },
       { header: 'Born again', width: 9 }, { header: 'Salvation date', width: 12 }, { header: 'Salvation place', width: 18 },
-      { header: 'Baptised', width: 9 }, { header: 'Baptism date', width: 12 },
+      { header: 'Baptised', width: 9 }, { header: 'Baptism date', width: 12 }, { header: 'Baptism place', width: 18 },
       { header: 'Cell Fellowship', width: 18 }, { header: 'Committed to', width: 26 },
+      ...fields.flatMap((f) => [
+        { header: f.label, width: f.type === 'yesno' ? 9 : 18 },
+        ...(f.type === 'yesno' && f.askDate ? [{ header: `${f.label} date`, width: 12 }] : []),
+        ...(f.type === 'yesno' && f.askPlace ? [{ header: `${f.label} place`, width: 18 }] : []),
+      ]),
       { header: 'Tags', width: 16 }, { header: 'Notes', width: 34 },
       { header: 'Added by', width: 16 }, { header: 'Added on', width: 12 }, { header: 'Welcome sent', width: 12 },
     ],
@@ -157,9 +165,17 @@ function buildReport(type: ReportType, weeks: string[], contacts: Contact[], rec
       c.whatsappStatus === 'active' ? 'Yes' : c.whatsappStatus === 'inactive' ? 'No' : 'Unchecked',
       c.metLocation || '—', fmtDate(c.metDate),
       yesNo(c.bornAgain), fmtDate(c.salvationDate), c.salvationPlace || '—',
-      yesNo(c.baptised), fmtDate(c.baptismDate),
+      yesNo(c.baptised), fmtDate(c.baptismDate), c.baptismPlace || '—',
       c.inCellFellowship ? c.cellName || 'Yes' : yesNo(c.inCellFellowship),
       committedText(c),
+      ...fields.flatMap((f) => {
+        const v = c.custom?.[f.id];
+        return [
+          formatValue(f, v),
+          ...(f.type === 'yesno' && f.askDate ? [fmtDate(v?.date)] : []),
+          ...(f.type === 'yesno' && f.askPlace ? [v?.place || '—'] : []),
+        ];
+      }),
       c.tags.join(', ') || '—', c.notes || '—',
       c.addedBy, fmtDate(c.addedAt), c.welcomeSentAt ? fmtDate(c.welcomeSentAt) : 'No',
     ]),
@@ -197,7 +213,7 @@ export default function ReportsModule({ contacts }: { contacts: Contact[] }) {
   });
 
   const report = useMemo(
-    () => buildReport(type, weeksBetween(fromWeek, toWeek), scoped, store.getAttendance()),
+    () => buildReport(type, weeksBetween(fromWeek, toWeek), scoped, store.getAttendance(), activeFields(store.getFields())),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [type, fromWeek, toWeek, scope, contacts],
   );
