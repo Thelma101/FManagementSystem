@@ -7,97 +7,24 @@ import { toGsm } from './sms';
 export { validateE164, toE164, parsePhone } from './phone';
 export type { CountryCode, PhoneParseResult } from './phone';
 
-function delay(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-// ── Auth API ──────────────────────────────────────────────────────────────────
-
-export type LoginResult =
-  | { ok: true; pendingMfa: true; userId: string; hint: string }
-  | { ok: false; error: string };
-
-export type MfaResult =
-  | { ok: true; user: AuthUser }
-  | { ok: false; error: string };
-
-/** Step 1 — email + password. Returns a pending MFA challenge on success. */
-export async function login(email: string, password: string): Promise<LoginResult> {
-  await delay(400 + Math.random() * 200);
-  const user = store.getUsers().find(
-    (u) => u.email.toLowerCase() === email.trim().toLowerCase() && u.passwordHash === password
-  );
-  if (!user) return { ok: false, error: 'Invalid email or password. Please try again.' };
-  return {
-    ok: true,
-    pendingMfa: true,
-    userId: user.id,
-    hint: user.mfaCode ?? '', // demo only — real backends never return the code
-  };
-}
-
-/** Step 2 — verify MFA code and open a session. */
-export async function verifyMfa(userId: string, code: string): Promise<MfaResult> {
-  await delay(350 + Math.random() * 200);
-  const user = store.getUsers().find((u) => u.id === userId);
-  if (!user) return { ok: false, error: 'Session expired. Please sign in again.' };
-  if (code.trim() !== user.mfaCode) return { ok: false, error: 'Incorrect verification code.' };
-  store.setCurrentUser(user);
-  return { ok: true, user };
-}
-
-/** Demo self-registration: lowest role, signed in straight away. */
-export async function register(name: string, email: string, password: string): Promise<MfaResult> {
-  await delay(400);
-  const users = store.getUsers();
-  const addr = email.trim().toLowerCase();
-  if (users.some((u) => u.email.toLowerCase() === addr)) {
-    return { ok: false, error: 'An account with this email already exists. Sign in instead.' };
-  }
-  const user: AuthUser = {
-    id: 'u' + Date.now(),
-    name: name.trim(),
-    email: addr,
-    role: 'authorized',
-    passwordHash: password,
-    mfaCode: String(Math.floor(100000 + Math.random() * 900000)),
-    createdBy: 'Self-registered',
-    createdAt: new Date().toISOString(),
-  };
-  store.saveUsers([...users, user]);
-  store.setCurrentUser(user);
-  return { ok: true, user };
-}
-
-export function logout(): void {
-  store.setCurrentUser(null);
-}
-
 // ── Messaging API ─────────────────────────────────────────────────────────────
 
 export interface SendResult {
   success: boolean;
   channels: string[];
-  /** 'sent' = accepted by the real SMS gateway; 'delivered' = simulated; 'failed' otherwise. */
+  /** 'sent' = accepted by eBulkSMS; 'failed' otherwise. Older logs may also say 'delivered'. */
   status: MessageStatus;
   error?: string;
   /** The gateway account can't send anything right now (no credit, bad key…); stop bulk sends. */
   fatal?: boolean;
 }
 
-/** Simulated send (demo mode) with a ~6% random failure rate. */
-async function simulateSend(channel: 'sms' | 'whatsapp'): Promise<SendResult> {
-  await delay(700 + Math.random() * 700);
-  if (Math.random() < 0.06) {
-    return { success: false, channels: [], status: 'failed', error: 'Delivery gateway timeout' };
-  }
-  return { success: true, channels: [channel === 'whatsapp' ? 'WhatsApp' : 'SMS'], status: 'delivered' };
-}
+const NOT_CONFIGURED_ERROR = 'Sending is not set up yet: the eBulkSMS settings are missing on the server.';
 
-/** SMS and WhatsApp both go through eBulkSMS when the server has it configured; otherwise they are simulated. */
+/** SMS and WhatsApp both go through eBulkSMS on the server. */
 export async function sendMessage(phone: string, channel: 'sms' | 'whatsapp', content: string): Promise<SendResult> {
   const r = await sendViaGateway(phone, channel === 'sms' ? toGsm(content) : content, channel);
-  if (!r.configured) return simulateSend(channel);
+  if (!r.configured) return { success: false, channels: [], status: 'failed', error: NOT_CONFIGURED_ERROR, fatal: true };
   if (!r.ok) return { success: false, channels: [], status: 'failed', error: r.error, fatal: r.fatal };
   return { success: true, channels: [channel === 'whatsapp' ? 'WhatsApp' : 'SMS'], status: 'sent' };
 }

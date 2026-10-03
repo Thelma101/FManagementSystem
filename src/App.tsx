@@ -1,9 +1,8 @@
 import { useState, useEffect } from 'react';
 import type { AuthUser, Contact, MessageLog, ScheduledEvent, Tab } from './types';
 import { store } from './lib/store';
-import { logout } from './lib/mockApi';
 import { canManageUsers } from './lib/permissions';
-import { isCloud, openedFromRecoveryLink } from './lib/supabase';
+import { isConfigured, openedFromRecoveryLink } from './lib/supabase';
 import { hasPendingWrites, onPasswordRecovery, onSyncError, refreshIfStale, restoreSession, signOut } from './lib/cloud';
 import { ToastProvider, useToast } from './components/ui/Toast';
 import LoginScreen from './components/auth/LoginScreen';
@@ -56,7 +55,6 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
   useEffect(reloadFromStore, []);
 
   useEffect(() => {
-    if (!isCloud) return;
     const offError = onSyncError((msg) => toast('error', 'Change not saved', msg));
 
     // Pick up changes made by other team members when returning to the tab.
@@ -195,17 +193,30 @@ function LoadingScreen({ error, onRetry }: { error?: string; onRetry: () => void
   );
 }
 
+function NotConfiguredScreen() {
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', background: 'var(--bg)' }}>
+      <div className="card" style={{ maxWidth: '440px', padding: '24px 26px' }}>
+        <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: '1.4rem', fontWeight: 500, color: 'var(--text)', marginBottom: '8px' }}>
+          Portal not set up yet
+        </h1>
+        <p style={{ fontSize: '13.5px', color: 'var(--text-2)', lineHeight: 1.6 }}>
+          The database settings are missing. Add <code>VITE_SUPABASE_URL</code> and <code>VITE_SUPABASE_PUBLISHABLE_KEY</code> to
+          the site's environment variables (see <code>.env.example</code>), then redeploy or restart.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
-  // Demo mode: re-read the account on load so role changes / revoked access take effect.
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    if (isCloud) return null;
-    const session = store.getCurrentUser();
-    if (!session) return null;
-    const fresh = store.getUsers().find((u) => u.id === session.id) ?? null;
-    store.setCurrentUser(fresh);
-    return fresh;
-  });
-  const [booting, setBooting] = useState(isCloud);
+  if (!isConfigured) return <NotConfiguredScreen />;
+  return <Portal />;
+}
+
+function Portal() {
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [booting, setBooting] = useState(true);
   const [bootError, setBootError] = useState('');
   const [recovery, setRecovery] = useState(openedFromRecoveryLink);
 
@@ -219,7 +230,6 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (!isCloud) return;
     boot();
     return onPasswordRecovery(() => setRecovery(true));
   }, []);
@@ -230,8 +240,7 @@ export default function App() {
   }
 
   async function handleLogout() {
-    if (isCloud) await signOut();
-    else logout();
+    await signOut();
     setRecovery(false);
     setUser(null);
   }
@@ -239,7 +248,7 @@ export default function App() {
   let screen: React.ReactNode;
   if (booting || bootError) screen = <LoadingScreen error={bootError} onRetry={boot} />;
   else if (!user) screen = <LoginScreen onLogin={handleLogin} />;
-  else if (isCloud && (recovery || user.mustChangePassword)) {
+  else if (recovery || user.mustChangePassword) {
     screen = (
       <SetPasswordScreen
         name={user.name}

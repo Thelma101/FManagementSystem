@@ -1,5 +1,4 @@
 import { accessToken } from './cloud';
-import { isCloud } from './supabase';
 
 const ENDPOINT = '/api/sms/send';
 
@@ -22,9 +21,8 @@ async function authHeaders(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-/** Sends one SMS or WhatsApp message through the server. Demo mode never reaches a real gateway. */
+/** Sends one SMS or WhatsApp message through the server. */
 export async function sendViaGateway(phone: string, message: string, channel: 'sms' | 'whatsapp' = 'sms'): Promise<GatewayResult> {
-  if (!isCloud) return { configured: false };
   let res: Response;
   try {
     res = await fetch(ENDPOINT, {
@@ -48,7 +46,6 @@ export async function sendViaGateway(phone: string, message: string, channel: 's
 }
 
 export async function getSmsGatewayStatus(): Promise<SmsGatewayStatus> {
-  if (!isCloud) return { configured: false };
   try {
     const res = await fetch(ENDPOINT, { headers: await authHeaders() });
     const data = (await res.json()) as SmsGatewayStatus;

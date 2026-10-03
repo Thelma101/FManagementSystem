@@ -3,19 +3,16 @@ import type { AuthUser, UserRole } from '../../types';
 import { store } from '../../lib/store';
 import { ROLE_DESCRIPTION, ROLE_LABEL, assignableRoles, canManageUser } from '../../lib/permissions';
 import { fmtDate } from '../../lib/services';
-import { isCloud } from '../../lib/supabase';
 import { adminUsers } from '../../lib/cloud';
 import { useToast } from '../ui/Toast';
 import { MIN_PASSWORD_LENGTH, passwordError } from '../../lib/passwordRules';
 
 interface Props { currentUser: AuthUser; }
 
-function genMfa() { return String(Math.floor(100000 + Math.random() * 900000)); }
-
 const ROLE_ORDER: UserRole[] = ['superadmin', 'admin', 'authorized'];
 const ROLE_BADGE: Record<UserRole, string> = { superadmin: 'badge-gold', admin: 'badge-navy', authorized: 'badge-gray' };
 
-interface Credentials { name: string; email: string; password: string; mfaCode?: string; role: UserRole }
+interface Credentials { name: string; email: string; password: string; role: UserRole }
 
 export default function UsersModule({ currentUser }: Props) {
   const { toast } = useToast();
@@ -49,38 +46,22 @@ export default function UsersModule({ currentUser }: Props) {
       setError(`Temporary password: ${tooShort.toLowerCase()}`);
       return;
     }
-    if (isCloud) {
-      setBusy(true);
-      const res = await adminUsers('POST', { name: form.name.trim(), email: form.email.trim(), password: form.password, role: form.role });
-      setBusy(false);
-      if (!res.user) { setError(res.error ?? 'Could not add user'); return; }
-      persist([...users, res.user]);
-      setOpen(false);
-      setForm(blankForm);
-      setCreated({ name: res.user.name, email: res.user.email, password: form.password, role: res.user.role });
-      toast('success', 'Access granted', res.user.name);
-      return;
-    }
-    const newUser: AuthUser = {
-      id: 'u' + Date.now(), name: form.name.trim(),
-      email: form.email.trim().toLowerCase(), role: form.role,
-      passwordHash: form.password, mfaCode: genMfa(),
-      createdBy: currentUser.name, createdAt: new Date().toISOString(),
-    };
-    persist([...users, newUser]);
+    setBusy(true);
+    const res = await adminUsers('POST', { name: form.name.trim(), email: form.email.trim(), password: form.password, role: form.role });
+    setBusy(false);
+    if (!res.user) { setError(res.error ?? 'Could not add user'); return; }
+    persist([...users, res.user]);
     setOpen(false);
     setForm(blankForm);
-    setCreated({ name: newUser.name, email: newUser.email, password: form.password, mfaCode: newUser.mfaCode, role: newUser.role });
-    toast('success', 'Access granted', newUser.name);
+    setCreated({ name: res.user.name, email: res.user.email, password: form.password, role: res.user.role });
+    toast('success', 'Access granted', res.user.name);
   }
 
   async function changeRole(target: AuthUser, role: UserRole) {
     if (!canManageUser(currentUser, target) || !allowedRoles.includes(role)) return;
     if (!confirm(`Change ${target.name}'s role to ${ROLE_LABEL[role]}?`)) return;
-    if (isCloud) {
-      const res = await adminUsers('PATCH', { id: target.id, role });
-      if (!res.user) { toast('error', 'Role not changed', res.error); return; }
-    }
+    const res = await adminUsers('PATCH', { id: target.id, role });
+    if (!res.user) { toast('error', 'Role not changed', res.error); return; }
     persist(users.map((u) => (u.id === target.id ? { ...u, role } : u)));
     toast('success', 'Role updated', `${target.name} is now ${ROLE_LABEL[role]}`);
   }
@@ -88,17 +69,15 @@ export default function UsersModule({ currentUser }: Props) {
   async function revokeUser(target: AuthUser) {
     if (!canManageUser(currentUser, target)) { toast('error', "You can't revoke this account"); return; }
     if (!confirm(`Revoke access for ${target.name}? They will no longer be able to sign in.`)) return;
-    if (isCloud) {
-      const res = await adminUsers('DELETE', { id: target.id });
-      if (res.error) { toast('error', 'Access not revoked', res.error); return; }
-    }
+    const res = await adminUsers('DELETE', { id: target.id });
+    if (res.error) { toast('error', 'Access not revoked', res.error); return; }
     persist(users.filter((x) => x.id !== target.id));
     toast('info', 'Access revoked', target.name);
   }
 
   function copyCredentials(c: Credentials) {
     const text = `Fellowship Portal access\nURL: ${window.location.origin}\nEmail: ${c.email}\nTemporary password: ${c.password}` +
-      (c.mfaCode ? `\nVerification code: ${c.mfaCode}` : '\nYou will be asked to choose your own password when you first sign in.');
+      '\nYou will be asked to choose your own password when you first sign in.';
     navigator.clipboard?.writeText(text).then(
       () => toast('success', 'Copied to clipboard'),
       () => toast('error', 'Could not copy — please copy manually'),
@@ -141,9 +120,7 @@ export default function UsersModule({ currentUser }: Props) {
                 <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 14px', fontSize: '13px' }}>
                   <span>Role</span><strong>{ROLE_LABEL[created.role]}</strong>
                   <span>Email</span><code>{created.email}</code>
-                  <span>Temporary password</span><code>{created.password}</code>
-                  {created.mfaCode && <><span>Verification code</span><code>{created.mfaCode}</code></>}
-                </div>
+                  <span>Temporary password</span><code>{created.password}</code>                </div>
               </div>
               <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
                 <button className="btn btn-outline btn-sm" onClick={() => copyCredentials(created)}>Copy</button>

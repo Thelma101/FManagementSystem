@@ -5,11 +5,7 @@ export interface AuthUser {
   name: string;
   email: string;
   role: UserRole;
-  /** Demo mode only — cloud accounts are handled by Supabase Auth. */
-  passwordHash?: string;
-  /** Demo mode only. */
-  mfaCode?: string;
-  /** Cloud mode: temporary password must be replaced at next sign-in. */
+  /** Temporary password must be replaced at next sign-in. */
   mustChangePassword?: boolean;
   createdBy?: string;
   createdAt?: string;

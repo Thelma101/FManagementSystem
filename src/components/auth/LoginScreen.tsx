@@ -1,7 +1,5 @@
 import { useState } from 'react';
-import { login, verifyMfa, register as demoRegister } from '../../lib/mockApi';
-import { isCloud } from '../../lib/supabase';
-import { register as cloudRegister, requestPasswordReset, signIn } from '../../lib/cloud';
+import { register, requestPasswordReset, signIn } from '../../lib/cloud';
 import { MIN_PASSWORD_LENGTH, passwordError } from '../../lib/passwordRules';
 import type { AuthUser } from '../../types';
 
@@ -23,12 +21,11 @@ function LfcCrest({ size = 72 }: { size?: number }) {
   );
 }
 
-type Step = 'credentials' | 'mfa' | 'reset' | 'register';
+type Step = 'credentials' | 'reset' | 'register';
 
 const HEADINGS: Record<Step, { badge: string; title: string; subtitle: string }> = {
   credentials: { badge: 'Secure Portal Access', title: 'Welcome back', subtitle: 'Sign in to access the communications portal.' },
   register: { badge: 'New Account', title: 'Create an account', subtitle: 'You start as an Authorized user. A Super Admin can give you more access.' },
-  mfa: { badge: 'Two-Factor Verification', title: "Verify it's you", subtitle: 'Enter the 6-digit code from your authenticator.' },
   reset: { badge: 'Password Reset', title: 'Forgot password?', subtitle: "Enter your email and we'll send you a link to set a new password." },
 };
 
@@ -36,11 +33,8 @@ export default function LoginScreen({ onLogin }: Props) {
   const [step, setStep]         = useState<Step>('credentials');
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
-  const [mfaCode, setMfaCode]   = useState('');
   const [name, setName]         = useState('');
   const [confirmPw, setConfirmPw] = useState('');
-  const [pendingUserId, setPendingUserId] = useState('');
-  const [mfaHint, setMfaHint]   = useState('');
   const [showPw, setShowPw]     = useState(false);
   const [error, setError]       = useState('');
   const [info, setInfo]         = useState('');
@@ -50,34 +44,15 @@ export default function LoginScreen({ onLogin }: Props) {
     e.preventDefault();
     setError('');
     setLoading(true);
-    if (isCloud) {
-      try {
-        const res = await signIn(email, password);
-        if (res.ok) { onLogin(res.user); return; }
-        setError(res.error);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Sign-in failed. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-      return;
+    try {
+      const res = await signIn(email, password);
+      if (res.ok) { onLogin(res.user); return; }
+      setError(res.error);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sign-in failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    const result = await login(email, password);
-    setLoading(false);
-    if (!result.ok) { setError(result.error); return; }
-    setPendingUserId(result.userId);
-    setMfaHint(result.hint);
-    setStep('mfa');
-  }
-
-  async function handleMfa(e: React.FormEvent) {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    const result = await verifyMfa(pendingUserId, mfaCode);
-    setLoading(false);
-    if (!result.ok) { setError(result.error); return; }
-    onLogin(result.user);
   }
 
   async function handleReset(e: React.FormEvent) {
@@ -99,7 +74,7 @@ export default function LoginScreen({ onLogin }: Props) {
     if (pwError) { setError(pwError); return; }
     if (password !== confirmPw) { setError('The two passwords do not match.'); return; }
     setLoading(true);
-    const res = isCloud ? await cloudRegister(name.trim(), email, password) : await demoRegister(name, email, password);
+    const res = await register(name.trim(), email, password);
     setLoading(false);
     if (res.ok) onLogin(res.user);
     else setError(res.error);
@@ -108,11 +83,8 @@ export default function LoginScreen({ onLogin }: Props) {
   function backToCredentials() {
     setStep('credentials');
     setConfirmPw('');
-    setMfaCode('');
     setError('');
     setInfo('');
-    setPendingUserId('');
-    setMfaHint('');
   }
 
   const heading = HEADINGS[step];
@@ -334,15 +306,13 @@ export default function LoginScreen({ onLogin }: Props) {
                     </svg>
                     Signing in…
                   </span>
-                ) : isCloud ? 'Sign in' : 'Continue'}
+                ) : 'Sign in'}
               </button>
 
-              {isCloud && (
-                <button type="button" className="btn btn-ghost" style={{ width: '100%' }}
-                  onClick={() => { setStep('reset'); setError(''); setInfo(''); }}>
-                  Forgot password?
-                </button>
-              )}
+              <button type="button" className="btn btn-ghost" style={{ width: '100%' }}
+                onClick={() => { setStep('reset'); setError(''); setInfo(''); }}>
+                Forgot password?
+              </button>
 
               <p style={{ fontSize: '13.5px', color: '#64748B', textAlign: 'center' }}>
                 New here?{' '}
@@ -386,7 +356,7 @@ export default function LoginScreen({ onLogin }: Props) {
                 ← Already have an account? Sign in
               </button>
             </form>
-          ) : step === 'reset' ? (
+          ) : (
             <form onSubmit={handleReset} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
                 <label className="label">Email address</label>
@@ -403,85 +373,6 @@ export default function LoginScreen({ onLogin }: Props) {
                 ← Back to sign in
               </button>
             </form>
-          ) : (
-            <form onSubmit={handleMfa} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div>
-                <label className="label">Verification code</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]{6}"
-                  maxLength={6}
-                  className="input mono"
-                  value={mfaCode}
-                  onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  required
-                  placeholder="000000"
-                  autoComplete="one-time-code"
-                  autoFocus
-                  style={{ letterSpacing: '0.35em', fontSize: '1.25rem', textAlign: 'center' }}
-                />
-              </div>
-
-              {mfaHint && (
-                <div style={{
-                  fontSize: '13px', color: 'var(--navy)',
-                  background: 'var(--navy-xlight)', border: '1px solid #BFCFE9',
-                  borderRadius: '8px', padding: '11px 14px',
-                }}>
-                  Demo code: <span className="mono" style={{ fontWeight: 600 }}>{mfaHint}</span>
-                </div>
-              )}
-
-              {error && (
-                <div style={{
-                  fontSize: '13.5px', color: '#B91C1C',
-                  background: '#FEE2E2', border: '1px solid #FCA5A5',
-                  borderRadius: '8px', padding: '11px 14px',
-                }}>
-                  {error}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading || mfaCode.length !== 6}
-                className="btn btn-primary"
-                style={{ width: '100%', padding: '11px', marginTop: '4px', fontSize: '14.5px', fontWeight: 600 }}
-              >
-                {loading ? 'Verifying…' : 'Verify & sign in'}
-              </button>
-
-              <button type="button" className="btn btn-ghost" onClick={backToCredentials} style={{ width: '100%' }}>
-                ← Back to sign in
-              </button>
-            </form>
-          )}
-
-          {step === 'credentials' && !isCloud && (
-            <div style={{
-              marginTop: '28px', padding: '16px 18px',
-              borderRadius: '10px', background: '#F5F8FD',
-              border: '1px solid #E2E8F0',
-            }}>
-              <p style={{ fontSize: '10.5px', fontWeight: 700, color: '#002B6B', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '10px' }}>
-                Demo Credentials
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                <p style={{ fontSize: '13px', color: '#334155' }}>
-                  <span style={{ color: '#64748B', display: 'inline-block', width: '70px' }}>Email</span>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 500, fontSize: '12.5px' }}>admin@fellowship.church</span>
-                </p>
-                <p style={{ fontSize: '13px', color: '#334155' }}>
-                  <span style={{ color: '#64748B', display: 'inline-block', width: '70px' }}>Password</span>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 500, fontSize: '12.5px' }}>admin123</span>
-                </p>
-                <p style={{ fontSize: '13px', color: '#334155' }}>
-                  <span style={{ color: '#64748B', display: 'inline-block', width: '70px' }}>MFA</span>
-                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 500, fontSize: '12.5px' }}>847291</span>
-                </p>
-              </div>
-            </div>
           )}
         </div>
       </div>

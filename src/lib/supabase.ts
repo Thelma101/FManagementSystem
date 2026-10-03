@@ -11,7 +11,7 @@ const key =
 /** Read before the client consumes the URL hash of a password-reset link. */
 export const openedFromRecoveryLink = typeof window !== 'undefined' && /type=recovery/.test(window.location.hash);
 
-/** Null when the app runs without Supabase (demo mode with browser storage). */
+/** Null when the Supabase settings are missing; the app then shows a setup notice instead of the portal. */
 export const supabase: SupabaseClient | null = url && key ? createClient(url, key) : null;
 
-export const isCloud = supabase !== null;
+export const isConfigured = supabase !== null;

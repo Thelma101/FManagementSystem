@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo } from 'react';
 import type { Contact, MessageLog, AuthUser } from '../../types';
 import { store } from '../../lib/store';
-import { sendMessage } from '../../lib/mockApi';
+import { sendMessage } from '../../lib/api';
 import { useToast } from '../ui/Toast';
 import SmsCounter from '../ui/SmsCounter';
 import { toGsm } from '../../lib/sms';
@@ -256,7 +256,7 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
                     <p style={{ fontSize: '12px', color: gateway.configured ? 'var(--text-3)' : 'var(--amber)', marginTop: '6px' }}>
                       {gateway.configured
                         ? `Messages go out through eBulkSMS: SMS as "${gateway.sender}", WhatsApp from the church number connected on ebulksms.com${gateway.balance !== undefined ? ` · ${gateway.balance} units left` : ''}.`
-                        : 'Sending is simulated: eBulkSMS is not connected on this site.'}
+                        : 'Sending is not set up: add the eBulkSMS settings on the server before messages can go out.'}
                     </p>
                   )}
                 </div>

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Contact, ContactField, AuthUser, MessageLog } from '../../types';
 import { store } from '../../lib/store';
-import { sendMessage } from '../../lib/mockApi';
+import { sendMessage } from '../../lib/api';
 import { canDeleteRecords, canManageFields } from '../../lib/permissions';
 import { activeFields } from '../../lib/customFields';
 import { fmtDate, serviceLabel } from '../../lib/services';

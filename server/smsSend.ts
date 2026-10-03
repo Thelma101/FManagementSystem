@@ -6,7 +6,7 @@
  * Runs in Node only (Vite dev/preview middleware and the serverless function in
  * /api). The eBulkSMS API key must never reach the browser. Only signed-in portal
  * members can send, so the route also needs the Supabase server settings; without
- * them (demo mode) it reports "not configured" and the portal simulates sending.
+ * them it reports "not configured" and the portal shows that sending is not set up.
  *
  *   EBULKSMS_USERNAME = login email on eBulkSMS
  *   EBULKSMS_API_KEY  = API key from eBulkSMS → API Settings
