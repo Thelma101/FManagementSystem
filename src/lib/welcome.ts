@@ -1,7 +1,7 @@
 import type { ServiceType } from '../types';
 import { fmtDate, serviceLabel, todayIso } from './services';
 
-export type WelcomeChannel = 'auto' | 'sms' | 'whatsapp';
+export type WelcomeChannel = 'sms' | 'whatsapp';
 
 export interface WelcomeOptions {
   text: string;

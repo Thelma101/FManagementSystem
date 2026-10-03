@@ -1,5 +1,7 @@
 /**
- * Server-side SMS sending through eBulkSMS (https://www.ebulksms.com/pages/json-api).
+ * Server-side SMS and WhatsApp sending through eBulkSMS
+ * (https://www.ebulksms.com/pages/json-api, /pages/json-whatsapp-api).
+ * WhatsApp needs the church's WhatsApp number connected on ebulksms.com first.
  *
  * Runs in Node only (Vite dev/preview middleware and the serverless function in
  * /api). The eBulkSMS API key must never reach the browser. Only signed-in portal
@@ -40,6 +42,7 @@ export interface SmsResponse {
 
 const API = 'https://api.ebulksms.com';
 const MAX_PAGES = 6;
+const MAX_WHATSAPP_CHARS = 4000;
 
 const STATUS_MESSAGES: Record<string, [number, string]> = {
   INSUFFICIENT_CREDIT: [402, 'Not enough SMS credit on eBulkSMS. Top up the account and try again.'],
@@ -48,6 +51,8 @@ const STATUS_MESSAGES: Record<string, [number, string]> = {
   MISSING_SENDER: [502, 'No sender name is set for eBulkSMS.'],
   INVALID_RECIPIENT: [400, 'eBulkSMS says this phone number is not valid.'],
   INVALID_MESSAGE: [400, 'eBulkSMS rejected the message: it is too long or has characters SMS cannot carry.'],
+  NOT_SUBSCRIBED: [502, 'No WhatsApp number is connected on eBulkSMS. Log in to ebulksms.com, open WhatsApp and scan the QR code with the church phone.'],
+  MISSING_RECIPIENT: [400, 'eBulkSMS says this is not a valid WhatsApp number.'],
 };
 
 function settings(env: SmsEnv) {
@@ -104,23 +109,40 @@ export async function handleSms(
   const phone = String(body.phone ?? '').trim();
   if (!/^\+[1-9]\d{7,14}$/.test(phone)) return fail(400, 'Phone number must be in international format, e.g. +2348031234567', cfg.sender);
 
-  const message = toGsm(String(body.message ?? '').trim());
-  if (!message) return fail(400, 'Message is empty', cfg.sender);
-  const info = smsInfo(message);
-  if (info.parts > MAX_PAGES) return fail(400, `Message is too long (${info.parts} SMS pages, maximum ${MAX_PAGES})`, cfg.sender);
+  const whatsapp = body.channel === 'whatsapp';
+  const raw = String(body.message ?? '').trim();
+  if (!raw) return fail(400, 'Message is empty', cfg.sender);
 
-  const payload = {
-    SMS: {
-      auth: { username: cfg.username, apikey: cfg.apiKey },
-      message: { sender: cfg.sender, messagetext: message, flash: '0' },
-      recipients: { gsm: [{ msidn: phone.slice(1), msgid: `fms${Date.now()}${Math.floor(Math.random() * 1e6)}` }] },
-      dndsender: cfg.dnd ? 1 : 0,
-    },
-  };
+  let url: string;
+  let payload: unknown;
+  if (whatsapp) {
+    if (raw.length > MAX_WHATSAPP_CHARS) return fail(400, `Message is too long (maximum ${MAX_WHATSAPP_CHARS} characters for WhatsApp)`, cfg.sender);
+    url = `${API}/sendwhatsapp.json`;
+    payload = {
+      WA: {
+        auth: { username: cfg.username, apikey: cfg.apiKey },
+        message: { subject: `Portal message ${new Date().toISOString().slice(0, 10)}`, messagetext: raw },
+        recipients: [phone.slice(1)],
+      },
+    };
+  } else {
+    const message = toGsm(raw);
+    const info = smsInfo(message);
+    if (info.parts > MAX_PAGES) return fail(400, `Message is too long (${info.parts} SMS pages, maximum ${MAX_PAGES})`, cfg.sender);
+    url = `${API}/sendsms.json`;
+    payload = {
+      SMS: {
+        auth: { username: cfg.username, apikey: cfg.apiKey },
+        message: { sender: cfg.sender, messagetext: message, flash: '0' },
+        recipients: { gsm: [{ msidn: phone.slice(1), msgid: `fms${Date.now()}${Math.floor(Math.random() * 1e6)}` }] },
+        dndsender: cfg.dnd ? 1 : 0,
+      },
+    };
+  }
 
   let res: Response;
   try {
-    res = await fetch(`${API}/sendsms.json`, {
+    res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -139,6 +161,6 @@ export async function handleSms(
       body: { configured: true, provider: 'ebulksms', sender: cfg.sender, ok: true, units: Number.isFinite(units) ? units : undefined },
     };
   }
-  const [code, text] = (status && STATUS_MESSAGES[status]) || [502, `eBulkSMS could not send the message (${status ?? `HTTP ${res.status}`}).`];
+  const [code, text] = (status && STATUS_MESSAGES[status]) || [502, `eBulkSMS could not send the ${whatsapp ? 'WhatsApp message' : 'SMS'} (${status ?? `HTTP ${res.status}`}).`];
   return fail(code, text, cfg.sender);
 }

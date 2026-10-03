@@ -4,7 +4,6 @@ import tailwindcss from '@tailwindcss/vite'
 import path from 'node:path'
 
 import siteConfiguration from './.figma/make/site.json'
-import { handleWhatsAppCheck, waConfigStatus, type WaEnv } from './server/whatsappCheck'
 import { handleAdminUsers, handleRegister, type AdminEnv } from './server/adminUsers'
 import { handleSms, type SmsEnv } from './server/smsSend'
 
@@ -55,13 +54,13 @@ react(),
   }
 })
 
-type ServerEnv = WaEnv & AdminEnv & SmsEnv
+type ServerEnv = AdminEnv & SmsEnv
 
 /** Serves the /api/* serverless routes during `vite dev` and `vite preview`. */
 function serverApi(env: ServerEnv): Plugin {
   const middleware: Connect.NextHandleFunction = (req, res, next) => {
     const route = req.url?.split('?')[0]
-    if (route !== '/api/whatsapp/check' && route !== '/api/admin/users' && route !== '/api/sms/send' && route !== '/api/auth/register') return next()
+    if (route !== '/api/admin/users' && route !== '/api/sms/send' && route !== '/api/auth/register') return next()
 
     const send = (status: number, body: unknown) => {
       res.statusCode = status
@@ -69,10 +68,6 @@ function serverApi(env: ServerEnv): Plugin {
       res.end(JSON.stringify(body))
     }
 
-    if (route === '/api/whatsapp/check' && req.method === 'GET') {
-      const cfg = waConfigStatus(env)
-      return send(200, { configured: cfg.configured, provider: cfg.provider })
-    }
     if (route === '/api/sms/send' && req.method === 'GET') {
       handleSms('GET', req.headers.authorization, {}, env)
         .then((r) => send(r.status, r.body))
@@ -98,12 +93,7 @@ function serverApi(env: ServerEnv): Plugin {
           const result = await handleSms(req.method, req.headers.authorization, body, env)
           return send(result.status, result.body)
         }
-        if (route === '/api/auth/register') {
-          const result = await handleRegister(req.method, body, env, req.socket.remoteAddress)
-          return send(result.status, result.body)
-        }
-        if (req.method !== 'POST') return send(405, { error: 'Method not allowed' })
-        const result = await handleWhatsAppCheck(body.phone, env)
+        const result = await handleRegister(req.method, body, env, req.socket.remoteAddress)
         send(result.status, result.body)
       } catch (err) {
         send(500, { error: err instanceof Error ? err.message : 'Server error' })

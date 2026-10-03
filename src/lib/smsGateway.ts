@@ -22,15 +22,15 @@ async function authHeaders(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-/** Sends one SMS through the server. Demo mode never reaches a real gateway. */
-export async function sendViaGateway(phone: string, message: string): Promise<GatewayResult> {
+/** Sends one SMS or WhatsApp message through the server. Demo mode never reaches a real gateway. */
+export async function sendViaGateway(phone: string, message: string, channel: 'sms' | 'whatsapp' = 'sms'): Promise<GatewayResult> {
   if (!isCloud) return { configured: false };
   let res: Response;
   try {
     res = await fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-      body: JSON.stringify({ phone, message }),
+      body: JSON.stringify({ phone, message, channel }),
     });
   } catch {
     return { configured: true, ok: false, error: 'Could not reach the server. Check your connection.' };
@@ -42,7 +42,7 @@ export async function sendViaGateway(phone: string, message: string): Promise<Ga
   if (!data || data.configured === false) return { configured: false };
   if (!res.ok || !data.ok) {
     const fatal = res.status === 401 || res.status === 402 || res.status === 502;
-    return { configured: true, ok: false, error: data.error ?? `SMS failed (${res.status})`, fatal };
+    return { configured: true, ok: false, error: data.error ?? `${channel === 'whatsapp' ? 'WhatsApp' : 'SMS'} failed (${res.status})`, fatal };
   }
   return { configured: true, ok: true, units: data.units };
 }

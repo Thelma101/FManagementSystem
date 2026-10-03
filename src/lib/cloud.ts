@@ -22,12 +22,12 @@ const TABLES: Record<Exclude<CollectionKey, 'fp_users'>, TableSpec> = {
   fp_contacts: {
     table: 'contacts',
     columns: [
-      'id', 'name', 'phone', 'whatsappStatus', 'whatsappCheckedAt', 'whatsappCheckSource', 'addedBy', 'addedAt',
+      'id', 'name', 'phone', 'addedBy', 'addedAt',
       'tags', 'notes', 'lastContacted', 'archived', 'metLocation', 'metDate', 'bornAgain', 'salvationDate',
       'salvationPlace', 'baptised', 'baptismDate', 'inCellFellowship', 'cellName', 'attendanceCommitment',
       'committedServices', 'committedSpecialEvent', 'welcomeSentAt', 'baptismPlace', 'custom',
     ],
-    dates: ['whatsappCheckedAt', 'addedAt', 'lastContacted', 'metDate', 'salvationDate', 'baptismDate', 'welcomeSentAt'],
+    dates: ['addedAt', 'lastContacted', 'metDate', 'salvationDate', 'baptismDate', 'welcomeSentAt'],
     order: 'added_at',
   },
   fp_attendance: {

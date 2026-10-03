@@ -674,6 +674,8 @@ hr.divider { border: none; border-top: 1px solid var(--border); }
   /* Dashboard padding */
   .dash-content { padding: 16px !important; gap: 14px !important; }
   .dash-topbar  { padding: 16px 16px !important; }
+  .dash-clock   { text-align: left !important; width: 100%; }
+  .dash-clock .mono { font-size: 1.35rem !important; }
 
   /* Page header padding */
   .page-header { padding: 14px 16px 0; }

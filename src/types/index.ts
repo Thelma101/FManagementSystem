@@ -15,8 +15,6 @@ export interface AuthUser {
   createdAt?: string;
 }
 
-export type WhatsAppStatus = 'unknown' | 'checking' | 'active' | 'inactive' | 'error';
-
 export type ServiceType = 'sunday' | 'midweek' | 'wsf' | 'spiritual-emphasis' | 'special-event';
 
 export type AttendanceCommitment = 'yes' | 'no' | 'undecided';
@@ -25,10 +23,6 @@ export interface Contact {
   id: string;
   name: string;
   phone: string; // E.164 format
-  whatsappStatus: WhatsAppStatus;
-  whatsappCheckedAt?: string;
-  /** 'provider' = checked by a real third-party API, 'demo' = simulated result */
-  whatsappCheckSource?: 'provider' | 'demo';
   addedBy: string;
   addedAt: string;
   tags: string[];

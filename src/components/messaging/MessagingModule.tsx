@@ -57,9 +57,6 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
     }).sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
   }, [logs, logSearch, logFilterCh]);
 
-  const waCount = [...selectedIds].filter((id) => contacts.find((c) => c.id === id)?.whatsappStatus === 'active').length;
-  const smsOnlyCount = selectedIds.size - waCount;
-
   const previewText = useMemo(() => {
     if (!msgText) return '';
     const sample = contacts.find((c) => selectedIds.has(c.id)) ?? activeContacts[0];
@@ -77,14 +74,7 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
     if (selectedIds.size === 0 || !msgText.trim()) return;
     setSending(channel);
     setProgress(0);
-    const targets = activeContacts.filter((c) => selectedIds.has(c.id));
-    // for WA broadcast, only send to contacts that have WA active
-    const eligible = channel === 'whatsapp' ? targets.filter((c) => c.whatsappStatus === 'active') : targets;
-    if (eligible.length === 0) {
-      toast('error', 'No eligible contacts', channel === 'whatsapp' ? 'None of the selected contacts have WhatsApp active.' : '');
-      setSending(null);
-      return;
-    }
+    const eligible = activeContacts.filter((c) => selectedIds.has(c.id));
     let success = 0;
     let stopped: string | undefined;
     const reached = new Set<string>();
@@ -93,7 +83,7 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
     for (let i = 0; i < eligible.length; i++) {
       const c = eligible[i];
       const text = msgText.replace(/{name}/g, c.name.split(' ')[0]);
-      const r = await sendMessage(c.phone, channel, text, { whatsappStatus: c.whatsappStatus });
+      const r = await sendMessage(c.phone, channel, text);
       newLogs.push({ id: 'ml' + Date.now() + i, contactId: c.id, contactName: c.name, contactPhone: c.phone, channel, content: text, status: r.status, sentAt: now, sentBy: user.name, kind: 'broadcast' });
       if (r.success) { success++; reached.add(c.id); }
       setProgress(Math.round(((i + 1) / eligible.length) * 100));
@@ -218,9 +208,6 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
                           <p style={{ fontSize: '13.5px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</p>
                           <p className="mono" style={{ fontSize: '12px', color: 'var(--text-3)' }}>{c.phone}</p>
                         </div>
-                        <span className={`badge ${c.whatsappStatus === 'active' ? 'badge-green' : 'badge-gray'}`} style={{ fontSize: '11px' }}>
-                          {c.whatsappStatus === 'active' ? 'WhatsApp' : 'SMS'}
-                        </span>
                       </label>
                     ))}
                     {filteredContacts.length === 0 && (
@@ -244,14 +231,7 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
 
                 {/* Send buttons */}
                 <div>
-                  <p className="label" style={{ marginBottom: '8px' }}>
-                    Send channel
-                    {selectedIds.size > 0 && (
-                      <span style={{ fontWeight: 400, color: 'var(--text-3)' }}>
-                        {' '}— {waCount} contacts have WhatsApp, {smsOnlyCount} SMS only
-                      </span>
-                    )}
-                  </p>
+                  <p className="label" style={{ marginBottom: '8px' }}>Send channel</p>
                   <div style={{ display: 'flex', gap: '10px' }}>
                     <button
                       className="btn btn-sms"
@@ -264,26 +244,19 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
                     </button>
                     <button
                       className="btn btn-wa"
-                      disabled={sending !== null || waCount === 0 || !msgText.trim()}
+                      disabled={sending !== null || selectedIds.size === 0 || !msgText.trim()}
                       onClick={() => broadcast('whatsapp')}
-                      title={waCount === 0 ? 'No selected contacts have WhatsApp active' : ''}
                       style={{ flex: 1, padding: '10px', fontSize: '14px', fontWeight: 600 }}
                     >
                       Send via WhatsApp
-                      {waCount > 0 && <span style={{ fontSize: '12px', fontWeight: 400, marginLeft: '4px' }}>({waCount})</span>}
+                      {selectedIds.size > 0 && <span style={{ fontSize: '12px', fontWeight: 400, marginLeft: '4px' }}>({selectedIds.size})</span>}
                     </button>
                   </div>
                   {gateway && (
                     <p style={{ fontSize: '12px', color: gateway.configured ? 'var(--text-3)' : 'var(--amber)', marginTop: '6px' }}>
                       {gateway.configured
-                        ? `SMS goes out through eBulkSMS as "${gateway.sender}"${gateway.balance !== undefined ? ` · ${gateway.balance} units left (about ${Math.floor(gateway.balance / 4)} SMS)` : ''}.`
-                        : 'SMS sending is simulated: no SMS provider is connected on this site.'}
-                      {' '}WhatsApp sending is simulated until a WhatsApp provider is connected.
-                    </p>
-                  )}
-                  {selectedIds.size > 0 && waCount === 0 && (
-                    <p style={{ fontSize: '12px', color: 'var(--amber)', marginTop: '5px' }}>
-                      None of the selected contacts have WhatsApp verified. WhatsApp button is disabled.
+                        ? `Messages go out through eBulkSMS: SMS as "${gateway.sender}", WhatsApp from the church number connected on ebulksms.com${gateway.balance !== undefined ? ` · ${gateway.balance} units left` : ''}.`
+                        : 'Sending is simulated: eBulkSMS is not connected on this site.'}
                     </p>
                   )}
                 </div>
@@ -306,25 +279,6 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
                 )}
               </div>
 
-              {selectedIds.size > 0 && (
-                <div style={{ marginTop: '16px', padding: '14px', borderRadius: '8px', background: 'var(--surface)', border: '1px solid var(--border)' }}>
-                  <p className="label" style={{ marginBottom: '10px' }}>Send summary</p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: 'var(--text-2)' }}>Via SMS</span>
-                      <span style={{ fontWeight: 600 }}>{selectedIds.size} contacts</span>
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span style={{ color: 'var(--text-2)' }}>Via WhatsApp</span>
-                      <span style={{ fontWeight: 600, color: waCount > 0 ? 'var(--green)' : 'var(--text-3)' }}>
-                        {waCount} eligible
-                      </span>
-                    </div>
-                    <hr className="divider" style={{ margin: '4px 0' }} />
-                    <p style={{ fontSize: '12px', color: 'var(--text-3)' }}>SMS and WhatsApp send independently — use both buttons to reach all channels.</p>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         ) : (

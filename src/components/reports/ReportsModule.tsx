@@ -147,7 +147,7 @@ function buildReport(type: ReportType, weeks: string[], contacts: Contact[], rec
       ...yesNoFields.map((f) => ({ label: f.label, value: pct(contacts.filter((c) => c.custom?.[f.id]?.value === true).length) })),
     ],
     columns: [
-      { header: 'Name', width: 22 }, { header: 'Phone', width: 17 }, { header: 'WhatsApp', width: 10 },
+      { header: 'Name', width: 22 }, { header: 'Phone', width: 17 },
       { header: 'Where met', width: 20 }, { header: 'Date met', width: 12 },
       { header: 'Born again', width: 9 }, { header: 'Salvation date', width: 12 }, { header: 'Salvation place', width: 18 },
       { header: 'Baptised', width: 9 }, { header: 'Baptism date', width: 12 }, { header: 'Baptism place', width: 18 },
@@ -162,7 +162,6 @@ function buildReport(type: ReportType, weeks: string[], contacts: Contact[], rec
     ],
     rows: contacts.map((c) => [
       c.name, c.phone,
-      c.whatsappStatus === 'active' ? 'Yes' : c.whatsappStatus === 'inactive' ? 'No' : 'Unchecked',
       c.metLocation || '—', fmtDate(c.metDate),
       yesNo(c.bornAgain), fmtDate(c.salvationDate), c.salvationPlace || '—',
       yesNo(c.baptised), fmtDate(c.baptismDate), c.baptismPlace || '—',

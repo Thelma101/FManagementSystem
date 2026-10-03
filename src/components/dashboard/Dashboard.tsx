@@ -1,4 +1,23 @@
+import { useEffect, useState } from 'react';
 import type { Contact, MessageLog, ScheduledEvent, AuthUser, Tab } from '../../types';
+
+function LiveClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <div className="dash-clock" style={{ textAlign: 'right' }} aria-live="off">
+      <p className="mono" style={{ fontSize: '1.7rem', fontWeight: 600, color: 'var(--navy)', lineHeight: 1.1, letterSpacing: '-0.01em' }}>
+        {now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true })}
+      </p>
+      <p style={{ fontSize: '12.5px', color: 'var(--text-3)', marginTop: '3px' }}>
+        {now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+      </p>
+    </div>
+  );
+}
 
 interface Props {
   user: AuthUser;
@@ -40,8 +59,10 @@ function StatCard({ label, value, sub, accent, iconPath }: {
 
 export default function Dashboard({ user, contacts, logs, events, onNavigate }: Props) {
   const active      = contacts.filter((c) => !c.archived);
-  const waActive    = active.filter((c) => c.whatsappStatus === 'active').length;
-  const unverified  = active.filter((c) => c.whatsappStatus === 'unknown').length;
+  const weekAgo     = Date.now() - 7 * 86400000;
+  const newThisWeek = active.filter((c) => new Date(c.addedAt).getTime() >= weekAgo).length;
+  const smsSent     = logs.filter((l) => l.channel === 'sms' || l.channel === 'both').length;
+  const waSent      = logs.filter((l) => l.channel === 'whatsapp' || l.channel === 'both').length;
   const delivered   = logs.filter((l) => l.status === 'delivered' || l.status === 'sent').length;
   const activeScheds = events.filter((e) => e.active).length;
 
@@ -90,39 +111,21 @@ export default function Dashboard({ user, contacts, logs, events, onNavigate }: 
         <div className="fade-up" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
           <div>
             <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: '5px' }}>
-              {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+              Dashboard
             </p>
             <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: '1.8rem', fontWeight: 500, color: 'var(--text)', lineHeight: 1.2 }}>
               {greeting},{' '}
               <em style={{ color: 'var(--gold-mid)', fontStyle: 'italic' }}>{user.name.split(' ')[0]}</em>
             </h1>
           </div>
-          {unverified > 0 && (
-            <button
-              type="button"
-              onClick={() => onNavigate('contacts')}
-              style={{
-                display: 'flex', alignItems: 'center', gap: '8px',
-                padding: '10px 16px', borderRadius: '10px',
-                background: 'var(--amber-bg)', border: '1px solid var(--amber-border)',
-                cursor: 'pointer', fontFamily: 'Inter, sans-serif',
-              }}
-            >
-              <svg width="15" height="15" fill="none" stroke="var(--amber)" strokeWidth="2" viewBox="0 0 24 24">
-                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/>
-              </svg>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--amber)' }}>
-                {unverified} contact{unverified > 1 ? 's' : ''} need WhatsApp verification
-              </span>
-            </button>
-          )}
+          <LiveClock />
         </div>
       </div>
 
       <div className="dash-content" style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div className="grid-stats">
-          <StatCard label="Total Contacts" value={active.length} sub={`${unverified} unverified`} accent="var(--navy)" iconPath="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8z" />
-          <StatCard label="WhatsApp Active" value={waActive} sub={`${active.length - waActive} SMS only`} accent="var(--green)" iconPath="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
+          <StatCard label="Total Contacts" value={active.length} sub={`${contacts.length - active.length} archived`} accent="var(--navy)" iconPath="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8z" />
+          <StatCard label="New This Week" value={newThisWeek} sub="contacts added in 7 days" accent="var(--green)" iconPath="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M8.5 11a4 4 0 100-8 4 4 0 000 8zM20 8v6M23 11h-6" />
           <StatCard label="Messages Sent" value={logs.length} sub={`${delivered} delivered`} accent="var(--blue)" iconPath="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" />
           <StatCard label="Live Schedules" value={activeScheds} sub={`${events.length - activeScheds} paused`} accent="var(--gold)" iconPath="M12 8v4l3 3M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </div>
@@ -225,12 +228,11 @@ export default function Dashboard({ user, contacts, logs, events, onNavigate }: 
         <div className="grid-bottom">
           <div className="card fade-up d3" style={{ padding: '20px 22px' }}>
             <h2 style={{ fontFamily: 'Playfair Display, serif', fontSize: '1rem', fontWeight: 500, color: 'var(--text)', marginBottom: '18px' }}>
-              Contact Channel Breakdown
+              Messages by Channel
             </h2>
             {[
-              { label: 'WhatsApp Active', count: waActive, color: 'var(--green)' },
-              { label: 'SMS Only', count: active.filter((c) => c.whatsappStatus === 'inactive').length, color: 'var(--blue)' },
-              { label: 'Unverified', count: unverified, color: 'var(--amber)' },
+              { label: 'SMS', count: smsSent, color: 'var(--blue)' },
+              { label: 'WhatsApp', count: waSent, color: 'var(--green)' },
             ].map((row) => (
               <div key={row.label} style={{ marginBottom: '14px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
@@ -239,7 +241,7 @@ export default function Dashboard({ user, contacts, logs, events, onNavigate }: 
                 </div>
                 <div className="progress-track">
                   <div className="progress-fill" style={{
-                    width: active.length > 0 ? `${(row.count / active.length) * 100}%` : '0%',
+                    width: logs.length > 0 ? `${(row.count / logs.length) * 100}%` : '0%',
                     background: row.color,
                   }} />
                 </div>

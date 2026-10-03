@@ -246,7 +246,6 @@ export function buildRows(sheet: Sheet, mapping: (string | '')[], targets: Targe
       id: `c${Date.now().toString(36)}-${i}`,
       name,
       phone,
-      whatsappStatus: 'unknown',
       addedBy: opts.userId,
       addedAt: now,
       tags,
@@ -276,8 +275,8 @@ export async function downloadTemplate(fields: ContactField[]): Promise<void> {
   const headers = templateHeaders(fields);
   const sample: Record<string, string> = {
     Name: 'Adaeze Okonkwo', Phone: '0803 123 4567', Tags: 'harvest-field', Notes: 'Prays for her family',
-    'Location met': 'Ota Market', 'Date met': '28/09/2026', 'Born again': 'Y', 'Salvation date': '28/09/2026',
-    'Salvation place': 'Ota Market outreach', Baptised: 'N', 'Baptism date': '', 'Baptism place': '',
+    'Location met': 'Lekki Phase 1 bus stop by Zenith Bank', 'Date met': '28/09/2026', 'Born again': 'Y', 'Salvation date': '28/09/2026',
+    'Salvation place': 'Lekki Phase 1 outreach', Baptised: 'N', 'Baptism date': '', 'Baptism place': '',
     'Cell fellowship': 'Y', 'Cell name': 'Canaan Estate WSF',
   };
   const { default: writeXlsxFile } = await import('write-excel-file/browser');

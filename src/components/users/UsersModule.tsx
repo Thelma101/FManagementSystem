@@ -1,8 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { AuthUser, UserRole } from '../../types';
 import { store } from '../../lib/store';
 import { ROLE_DESCRIPTION, ROLE_LABEL, assignableRoles, canManageUser } from '../../lib/permissions';
-import { getWaIntegrationStatus, providerName, type WaIntegrationStatus } from '../../lib/whatsapp';
 import { fmtDate } from '../../lib/services';
 import { isCloud } from '../../lib/supabase';
 import { adminUsers } from '../../lib/cloud';
@@ -27,10 +26,7 @@ export default function UsersModule({ currentUser }: Props) {
   const [form, setForm] = useState(blankForm);
   const [error, setError] = useState('');
   const [created, setCreated] = useState<Credentials | null>(null);
-  const [wa, setWa] = useState<WaIntegrationStatus | null>(null);
   const [busy, setBusy] = useState(false);
-
-  useEffect(() => { getWaIntegrationStatus().then(setWa); }, []);
 
   function persist(next: AuthUser[]) {
     store.saveUsers(next);
@@ -232,26 +228,6 @@ export default function UsersModule({ currentUser }: Props) {
                 </div>
               ))}
             </div>
-          </div>
-
-          <div className="card" style={{ padding: '18px 20px' }}>
-            <p style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--navy)', marginBottom: '10px' }}>WhatsApp number verification</p>
-            {wa === null ? (
-              <p style={{ fontSize: '12.5px', color: 'var(--text-3)' }}>Checking connection…</p>
-            ) : wa.configured ? (
-              <p style={{ fontSize: '12.5px', color: 'var(--text-2)', lineHeight: 1.6 }}>
-                <span className="badge badge-green" style={{ marginRight: '6px' }}>Connected</span>
-                Numbers are verified live through <strong>{providerName(wa.provider)}</strong>.
-              </p>
-            ) : (
-              <div style={{ fontSize: '12.5px', color: 'var(--text-2)', lineHeight: 1.6 }}>
-                <p><span className="badge badge-amber" style={{ marginRight: '6px' }}>Demo mode</span>No verification provider is connected, so WhatsApp checks are simulated and marked "demo".</p>
-                <p style={{ marginTop: '6px' }}>
-                  To go live, create an account with <strong>WA Lookup</strong> or <strong>2Chat</strong> and set
-                  <code> WA_CHECK_PROVIDER</code> and <code>WA_CHECK_API_KEY</code> on the server (see README).
-                </p>
-              </div>
-            )}
           </div>
 
           <div className="card" style={{ padding: '18px 20px' }}>

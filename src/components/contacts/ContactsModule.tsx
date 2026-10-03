@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react';
-import type { Contact, ContactField, AuthUser, MessageLog, WhatsAppStatus } from '../../types';
+import type { Contact, ContactField, AuthUser, MessageLog } from '../../types';
 import { store } from '../../lib/store';
 import { sendMessage } from '../../lib/mockApi';
-import { checkWhatsApp, providerName } from '../../lib/whatsapp';
 import { canDeleteRecords, canManageFields } from '../../lib/permissions';
 import { activeFields } from '../../lib/customFields';
 import { fmtDate, serviceLabel } from '../../lib/services';
@@ -10,7 +9,7 @@ import { fillWelcome, type WelcomeOptions } from '../../lib/welcome';
 import { useToast } from '../ui/Toast';
 import SmsCounter from '../ui/SmsCounter';
 import { toGsm } from '../../lib/sms';
-import ContactFormModal, { TAG_OPTIONS, WaBadge } from './ContactFormModal';
+import ContactFormModal, { TAG_OPTIONS } from './ContactFormModal';
 import FieldsManager from './FieldsManager';
 import ImportContactsModal from './ImportContactsModal';
 
@@ -35,12 +34,10 @@ function SendModal({ contact, user, onClose, onSent }: {
   const [msg, setMsg] = useState('');
   const [sending, setSending] = useState<'sms' | 'whatsapp' | null>(null);
 
-  const canWa = contact.whatsappStatus === 'active';
-
   async function send(channel: 'sms' | 'whatsapp') {
     if (!msg.trim()) return;
     setSending(channel);
-    const result = await sendMessage(contact.phone, channel, msg, { whatsappStatus: contact.whatsappStatus });
+    const result = await sendMessage(contact.phone, channel, msg);
     const log: MessageLog = {
       id: 'ml' + Date.now(),
       contactId: contact.id,
@@ -85,20 +82,13 @@ function SendModal({ contact, user, onClose, onSent }: {
             />
             <SmsCounter text={msg} onFix={() => setMsg(toGsm(msg))} />
           </div>
-          {!canWa && contact.whatsappStatus !== 'unknown' && (
-            <p className="alert alert-navy">WhatsApp not detected on this number — SMS only.</p>
-          )}
-          {contact.whatsappStatus === 'unknown' && (
-            <p className="alert alert-amber">WhatsApp status unverified. Use Edit → Check WhatsApp to enable WhatsApp delivery.</p>
-          )}
         </div>
         <div className="modal-footer" style={{ gap: '8px' }}>
           <button className="btn btn-outline" onClick={onClose}>Cancel</button>
           <button className="btn btn-sms" disabled={!msg.trim() || sending !== null} onClick={() => send('sms')}>
             {sending === 'sms' ? 'Sending…' : 'Send SMS'}
           </button>
-          <button className="btn btn-wa" disabled={!msg.trim() || sending !== null || !canWa} onClick={() => send('whatsapp')}
-            title={!canWa ? 'WhatsApp not active on this number' : ''}>
+          <button className="btn btn-wa" disabled={!msg.trim() || sending !== null} onClick={() => send('whatsapp')}>
             {sending === 'whatsapp' ? 'Sending…' : 'Send WhatsApp'}
           </button>
         </div>
@@ -130,10 +120,8 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
   const [addOpen, setAddOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [sendTarget, setSendTarget] = useState<Contact | null>(null);
-  const [checking, setChecking] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [filterTag, setFilterTag] = useState('');
-  const [filterWa, setFilterWa] = useState<WhatsAppStatus | ''>('');
   const [filterSpiritual, setFilterSpiritual] = useState<SpiritualFilter>('');
   const [showArchived, setShowArchived] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
@@ -155,7 +143,6 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
     const q = search.toLowerCase();
     if (q && ![c.name, c.phone, c.notes, c.metLocation ?? '', c.cellName ?? ''].some((v) => v.toLowerCase().includes(q))) return false;
     if (filterTag && !c.tags.includes(filterTag)) return false;
-    if (filterWa && c.whatsappStatus !== filterWa) return false;
     switch (filterSpiritual) {
       case 'born-again': if (c.bornAgain !== true) return false; break;
       case 'not-born-again': if (c.bornAgain === true) return false; break;
@@ -173,8 +160,7 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
     return true;
   });
 
-  const unverified = active.filter((c) => c.whatsappStatus === 'unknown');
-  const hasFilters = !!(search || filterTag || filterWa || filterSpiritual);
+  const hasFilters = !!(search || filterTag || filterSpiritual);
 
   /** Store is the source of truth so concurrent async updates don't clobber each other. */
   function updateContact(id: string, patch: Partial<Contact>) {
@@ -189,55 +175,10 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
     onLogAdded(log);
   }
 
-  async function runWaCheck(contact: Contact): Promise<Contact> {
-    updateContact(contact.id, { whatsappStatus: 'checking' });
-    const result = await checkWhatsApp(contact.phone);
-    const updated = updateContact(contact.id, {
-      whatsappStatus: result.status,
-      whatsappCheckSource: result.source,
-      whatsappCheckedAt: new Date().toISOString(),
-    });
-    if (result.status === 'error') {
-      toast('error', 'WhatsApp check failed', result.message ?? `${providerName(result.provider)} could not check this number.`);
-    }
-    return updated;
-  }
-
-  async function handleCheckWa(contact: Contact) {
-    setChecking(contact.id);
-    const updated = await runWaCheck(contact);
-    setChecking(null);
-    if (updated.whatsappStatus === 'error') return;
-    const suffix = updated.whatsappCheckSource === 'demo' ? ' (demo result)' : '';
-    toast(updated.whatsappStatus === 'active' ? 'success' : 'info',
-      (updated.whatsappStatus === 'active' ? 'On WhatsApp' : 'Not on WhatsApp') + suffix, contact.name);
-  }
-
-  async function handleBulkCheck() {
-    toast('info', `Checking ${unverified.length} contacts…`);
-    for (const c of unverified) {
-      setChecking(c.id);
-      await runWaCheck(c);
-    }
-    setChecking(null);
-    toast('success', 'Verification complete');
-  }
-
-  async function sendWelcome(contact: Contact, opts: WelcomeOptions) {
-    let current = contact;
-    let channel: 'sms' | 'whatsapp' = 'sms';
-
-    if (opts.channel !== 'sms') {
-      current = await runWaCheck(contact);
-      if (current.whatsappStatus === 'active') channel = 'whatsapp';
-      else if (opts.channel === 'whatsapp') {
-        toast('error', 'Welcome message not sent', `${contact.name} is not on WhatsApp. Use Send → SMS instead.`);
-        return;
-      }
-    }
-
+  async function sendWelcome(current: Contact, opts: WelcomeOptions) {
+    const channel = opts.channel;
     const text = fillWelcome(opts.text, current);
-    const result = await sendMessage(current.phone, channel, text, { whatsappStatus: current.whatsappStatus });
+    const result = await sendMessage(current.phone, channel, text);
     const now = new Date().toISOString();
     addLog({
       id: 'ml' + Date.now(),
@@ -312,15 +253,9 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
             <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: '1.8rem', fontWeight: 500, color: 'var(--text)' }}>Contacts</h1>
             <p style={{ fontSize: '13px', color: 'var(--text-3)', marginTop: '2px' }}>
               {active.length} active · {archived.length} archived
-              {unverified.length > 0 && <> · <span style={{ color: 'var(--amber)' }}>{unverified.length} unverified</span></>}
             </p>
           </div>
           <div className="action-row">
-            {unverified.length > 0 && (
-              <button className="btn btn-outline" onClick={handleBulkCheck} disabled={checking !== null}>
-                ↻ Verify {unverified.length}
-              </button>
-            )}
             {canManageFields(user) && (
               <button className="btn btn-outline" onClick={() => setFieldsOpen(true)} title="Add questions such as Bible school">Fields</button>
             )}
@@ -358,17 +293,11 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
             <option value="">All tags</option>
             {tagOptions.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
-          <select value={filterWa} onChange={(e) => setFilterWa(e.target.value as WhatsAppStatus | '')} className="input" style={{ width: 'auto', minWidth: '130px' }}>
-            <option value="">All WhatsApp</option>
-            <option value="active">On WhatsApp</option>
-            <option value="inactive">SMS only</option>
-            <option value="unknown">Unverified</option>
-          </select>
           <button className={`chip ${showArchived ? 'chip-on' : ''}`} onClick={() => setShowArchived(!showArchived)}>
             {showArchived ? '← Active contacts' : 'Show archived'}
           </button>
           {hasFilters && (
-            <button className="btn btn-ghost btn-sm" onClick={() => { setSearch(''); setFilterTag(''); setFilterWa(''); setFilterSpiritual(''); }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setSearch(''); setFilterTag(''); setFilterSpiritual(''); }}>
               Clear filters
             </button>
           )}
@@ -419,12 +348,6 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
                   </td>
                   <td>
                     <p className="mono" style={{ fontSize: '13px', color: 'var(--text-2)' }}>{c.phone}</p>
-                    <div style={{ marginTop: '3px', display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                      <WaBadge status={c.whatsappStatus} />
-                      {c.whatsappCheckSource === 'demo' && c.whatsappStatus !== 'checking' && (
-                        <span className="badge badge-gray" style={{ fontSize: '10.5px' }} title="Simulated — connect a WhatsApp provider for real results">demo</span>
-                      )}
-                    </div>
                   </td>
                   <td style={{ fontSize: '12.5px' }}>
                     <p style={{ color: 'var(--text-2)', maxWidth: '170px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.metLocation || '—'}</p>
@@ -480,8 +403,6 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
           onSave={handleEdit}
           onClose={() => setEditId(null)}
           onOpenExisting={openExisting}
-          onCheckWa={handleCheckWa}
-          checking={checking}
         />
       )}
 

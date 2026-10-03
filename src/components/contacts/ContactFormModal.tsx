@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { AttendanceCommitment, AuthUser, Contact, CustomValue, ServiceType, WhatsAppStatus } from '../../types';
+import type { AttendanceCommitment, AuthUser, Contact, CustomValue, ServiceType } from '../../types';
 import { activeFields, cleanCustom } from '../../lib/customFields';
 import { store } from '../../lib/store';
 import { parsePhone } from '../../lib/phone';
@@ -11,14 +11,6 @@ import SmsCounter from '../ui/SmsCounter';
 import { toGsm } from '../../lib/sms';
 
 export const TAG_OPTIONS = ['harvest-field', 'soul-winning', 'follow-up', 'youth', 'wsf', 'new-convert'];
-
-export function WaBadge({ status }: { status: WhatsAppStatus }) {
-  if (status === 'active') return <span className="badge badge-green">WhatsApp</span>;
-  if (status === 'inactive') return <span className="badge badge-gray">SMS only</span>;
-  if (status === 'checking') return <span className="badge badge-amber">Checking…</span>;
-  if (status === 'error') return <span className="badge badge-red">Check failed</span>;
-  return <span className="badge badge-amber">Unverified</span>;
-}
 
 function YesNo({ value, onChange }: { value?: boolean; onChange: (v: boolean | undefined) => void }) {
   return (
@@ -85,12 +77,10 @@ interface Props {
   onSave: (contact: Contact, welcome?: WelcomeOptions) => void;
   onClose: () => void;
   onOpenExisting: (c: Contact) => void;
-  onCheckWa?: (c: Contact) => Promise<void>;
-  checking?: string | null;
 }
 
 export default function ContactFormModal({
-  mode, contact, contacts, user, onSave, onClose, onOpenExisting, onCheckWa, checking,
+  mode, contact, contacts, user, onSave, onClose, onOpenExisting,
 }: Props) {
   const { toast } = useToast();
   const [form, setForm] = useState<FormState>(() => initialForm(contact));
@@ -102,7 +92,7 @@ export default function ContactFormModal({
   const [sendWelcome, setSendWelcome] = useState(true);
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? 'custom');
   const [welcomeText, setWelcomeText] = useState(templates[0]?.text ?? '');
-  const [welcomeChannel, setWelcomeChannel] = useState<WelcomeChannel>('auto');
+  const [welcomeChannel, setWelcomeChannel] = useState<WelcomeChannel>('sms');
 
   const users = useMemo(() => store.getUsers(), []);
   const allFields = useMemo(() => store.getFields(), []);
@@ -183,20 +173,15 @@ export default function ContactFormModal({
       id: 'c' + Date.now(),
       name: '',
       phone: '',
-      whatsappStatus: 'unknown',
       addedBy: user.id,
       addedAt: new Date().toISOString(),
       tags: [],
       notes: '',
     };
-    const phoneChanged = contact && contact.phone !== parsed.e164;
     const saved: Contact = {
       ...base,
       name: form.name.trim(),
       phone: parsed.e164,
-      whatsappStatus: phoneChanged ? 'unknown' : base.whatsappStatus,
-      whatsappCheckSource: phoneChanged ? undefined : base.whatsappCheckSource,
-      whatsappCheckedAt: phoneChanged ? undefined : base.whatsappCheckedAt,
       tags: form.tags,
       notes: form.notes.trim(),
       metLocation: form.metLocation.trim() || undefined,
@@ -222,7 +207,6 @@ export default function ContactFormModal({
     onSave(saved, mode === 'add' && sendWelcome ? { text: welcomeText.trim(), channel: welcomeChannel } : undefined);
   }
 
-  const isChecking = contact && (checking === contact.id || contact.whatsappStatus === 'checking');
   const dupAddedBy = duplicate ? users.find((u) => u.id === duplicate.addedBy)?.name : undefined;
 
   return (
@@ -245,27 +229,6 @@ export default function ContactFormModal({
             {/* ── Basic details ─────────────────────────────────────────── */}
             <div className="form-section">
               <p className="form-section-title">Contact details</p>
-
-              {mode === 'edit' && contact && onCheckWa && (
-                <div className="field-row" style={{ padding: '10px 12px', borderRadius: '8px', background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '13px', color: 'var(--text-2)' }}>WhatsApp:</span>
-                      <WaBadge status={contact.whatsappStatus} />
-                    </div>
-                    {contact.whatsappCheckedAt && (
-                      <span style={{ fontSize: '11.5px', color: 'var(--text-3)' }}>
-                        {contact.whatsappCheckSource === 'provider'
-                          ? `Verified by provider on ${fmtDate(contact.whatsappCheckedAt)}`
-                          : `Demo result (${fmtDate(contact.whatsappCheckedAt)}) — no provider connected`}
-                      </span>
-                    )}
-                  </div>
-                  <button type="button" className="btn btn-outline btn-sm" disabled={!!isChecking} onClick={() => onCheckWa(contact)}>
-                    {isChecking ? 'Checking…' : 'Check WhatsApp'}
-                  </button>
-                </div>
-              )}
 
               <div>
                 <label className="label">Full name *</label>
@@ -310,7 +273,7 @@ export default function ContactFormModal({
                 <div>
                   <label className="label">Location met</label>
                   <input className="input" value={form.metLocation} onChange={(e) => set('metLocation', e.target.value)}
-                    placeholder="e.g. Ota Market, Sango bus stop" />
+                    placeholder="e.g. Lekki Phase 1 bus stop by Zenith Bank" />
                 </div>
                 <div>
                   <label className="label">Date met</label>
@@ -503,9 +466,8 @@ export default function ContactFormModal({
                       <div>
                         <label className="label">Send via</label>
                         <select className="input" value={welcomeChannel} onChange={(e) => setWelcomeChannel(e.target.value as WelcomeChannel)}>
-                          <option value="auto">WhatsApp if available, otherwise SMS</option>
-                          <option value="sms">SMS only</option>
-                          <option value="whatsapp">WhatsApp only</option>
+                          <option value="sms">SMS</option>
+                          <option value="whatsapp">WhatsApp</option>
                         </select>
                       </div>
                     </div>

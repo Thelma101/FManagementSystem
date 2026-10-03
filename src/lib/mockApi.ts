@@ -1,4 +1,4 @@
-import type { AuthUser, Contact, MessageLog, MessageStatus, ScheduledEvent, WhatsAppStatus } from '../types';
+import type { AuthUser, Contact, MessageLog, MessageStatus, ScheduledEvent } from '../types';
 import { store } from './store';
 import { sendViaGateway } from './smsGateway';
 import { toGsm } from './sms';
@@ -73,9 +73,6 @@ export function logout(): void {
   store.setCurrentUser(null);
 }
 
-// WhatsApp registration checks live in ./whatsapp.ts (real provider via /api, demo fallback).
-export { checkWhatsApp } from './whatsapp';
-
 // ── Messaging API ─────────────────────────────────────────────────────────────
 
 export interface SendResult {
@@ -88,45 +85,21 @@ export interface SendResult {
   fatal?: boolean;
 }
 
-/** Simulated send with a ~6% random failure rate. WhatsApp to inactive numbers always fails. */
-async function simulateSend(channel: 'sms' | 'whatsapp' | 'both', whatsappStatus?: WhatsAppStatus): Promise<SendResult> {
+/** Simulated send (demo mode) with a ~6% random failure rate. */
+async function simulateSend(channel: 'sms' | 'whatsapp'): Promise<SendResult> {
   await delay(700 + Math.random() * 700);
-
-  if ((channel === 'whatsapp' || channel === 'both') && whatsappStatus === 'inactive') {
-    if (channel === 'whatsapp') {
-      return { success: false, channels: [], status: 'failed', error: 'WhatsApp not available on this number' };
-    }
-    return { success: true, channels: ['SMS'], status: 'delivered' };
-  }
-
   if (Math.random() < 0.06) {
     return { success: false, channels: [], status: 'failed', error: 'Delivery gateway timeout' };
   }
-
-  const channels =
-    channel === 'both' ? ['SMS', 'WhatsApp'] : channel === 'whatsapp' ? ['WhatsApp'] : ['SMS'];
-  return { success: true, channels, status: 'delivered' };
+  return { success: true, channels: [channel === 'whatsapp' ? 'WhatsApp' : 'SMS'], status: 'delivered' };
 }
 
-/**
- * SMS goes through the real gateway (eBulkSMS) when the server has it configured;
- * otherwise, and for WhatsApp until a sending provider is connected, it is simulated.
- */
-export async function sendMessage(
-  phone: string,
-  channel: 'sms' | 'whatsapp' | 'both',
-  content: string,
-  opts?: { whatsappStatus?: WhatsAppStatus }
-): Promise<SendResult> {
-  if (channel === 'whatsapp') return simulateSend(channel, opts?.whatsappStatus);
-
-  const sms = await sendViaGateway(phone, toGsm(content));
-  if (!sms.configured) return simulateSend(channel, opts?.whatsappStatus);
-  if (!sms.ok) return { success: false, channels: [], status: 'failed', error: sms.error, fatal: sms.fatal };
-  if (channel === 'sms') return { success: true, channels: ['SMS'], status: 'sent' };
-
-  const wa = await simulateSend('whatsapp', opts?.whatsappStatus);
-  return { success: true, channels: wa.success ? ['SMS', 'WhatsApp'] : ['SMS'], status: 'sent' };
+/** SMS and WhatsApp both go through eBulkSMS when the server has it configured; otherwise they are simulated. */
+export async function sendMessage(phone: string, channel: 'sms' | 'whatsapp', content: string): Promise<SendResult> {
+  const r = await sendViaGateway(phone, channel === 'sms' ? toGsm(content) : content, channel);
+  if (!r.configured) return simulateSend(channel);
+  if (!r.ok) return { success: false, channels: [], status: 'failed', error: r.error, fatal: r.fatal };
+  return { success: true, channels: [channel === 'whatsapp' ? 'WhatsApp' : 'SMS'], status: 'sent' };
 }
 
 /** Persist a new message log and update contact lastContacted. */
