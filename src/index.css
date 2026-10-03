@@ -633,14 +633,16 @@ hr.divider { border: none; border-top: 1px solid var(--border); }
 .grid-stats     { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 .grid-main      { display: grid; grid-template-columns: 1fr 300px; gap: 16px; }
 .grid-bottom    { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.grid-compose   { display: grid; grid-template-columns: 1fr 300px; height: 100%; overflow: hidden; }
+.grid-compose   { display: grid; grid-template-columns: 1fr 300px; grid-template-rows: 100%; height: 100%; overflow: hidden; }
+.messaging-content { flex: 1; min-height: 0; overflow: hidden; }
 
 /* ── Tablet: ≤ 1100px ───────────────────────────────────────────────────── */
 @media (max-width: 1100px) {
   .grid-stats  { grid-template-columns: repeat(2, 1fr); }
   .grid-main   { grid-template-columns: 1fr; }
   .grid-bottom { grid-template-columns: 1fr; }
-  .grid-compose { grid-template-columns: 1fr; height: auto; overflow: visible; }
+  .grid-compose { grid-template-columns: 1fr; grid-template-rows: auto; height: auto; overflow: visible; }
+  .messaging-content { overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
   .page-header { padding: 18px 20px 0; }
   .page-body   { padding: 20px; }

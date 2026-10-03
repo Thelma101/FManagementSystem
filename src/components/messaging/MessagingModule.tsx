@@ -148,7 +148,7 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflow: 'hidden' }}>
+      <div className="messaging-content">
         {tab === 'compose' ? (
           <div className="grid-compose">
             {/* Compose */}
