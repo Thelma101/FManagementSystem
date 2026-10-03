@@ -238,6 +238,22 @@ export async function signIn(email: string, password: string): Promise<SignInRes
   return { ok: true, user };
 }
 
+/** Creates an account with the lowest role, then signs straight in. */
+export async function register(name: string, email: string, password: string): Promise<SignInResult> {
+  try {
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password }),
+    });
+    const json = (await res.json().catch(() => ({}))) as { error?: string };
+    if (!res.ok) return { ok: false, error: json.error ?? `Registration failed (${res.status})` };
+  } catch {
+    return { ok: false, error: 'Could not reach the server. Check your connection.' };
+  }
+  return signIn(email, password);
+}
+
 /** Restores a saved session on page load. */
 export async function restoreSession(): Promise<AuthUser | null> {
   const { data } = await client().auth.getSession();

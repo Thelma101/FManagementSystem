@@ -128,3 +128,60 @@ export async function handleAdminUsers(
 
   return fail(405, 'Method not allowed');
 }
+
+const REGISTER_LIMIT = 5;
+const REGISTER_WINDOW_MS = 60 * 60 * 1000;
+// Per server instance only, so this slows down abuse rather than preventing it.
+const recentRegistrations = new Map<string, number[]>();
+
+/**
+ * Self-registration: anyone can create an account, which always gets the lowest
+ * role. Super Admins promote people afterwards from the Users page. Accounts are
+ * created already confirmed, so no confirmation email is needed.
+ */
+export async function handleRegister(
+  method: string | undefined,
+  body: Record<string, unknown>,
+  env: AdminEnv,
+  clientIp = 'unknown',
+): Promise<AdminResponse> {
+  if (method !== 'POST') return fail(405, 'Method not allowed');
+  const url = env.SUPABASE_URL || env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url || !env.SUPABASE_SECRET_KEY) return fail(501, 'Registration is not configured on the server');
+
+  const name = String(body.name ?? '').trim().replace(/\s+/g, ' ');
+  const email = String(body.email ?? '').trim().toLowerCase();
+  const password = String(body.password ?? '');
+  if (name.length < 2 || name.length > 80) return fail(400, 'Enter your full name');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 200) return fail(400, 'Enter a valid email address');
+  const pwError = passwordError(password);
+  if (pwError) return fail(400, pwError);
+
+  const now = Date.now();
+  const recent = (recentRegistrations.get(clientIp) ?? []).filter((t) => now - t < REGISTER_WINDOW_MS);
+  if (recent.length >= REGISTER_LIMIT) return fail(429, 'Too many accounts created from this network. Please try again later.');
+
+  const admin = createClient(url, env.SUPABASE_SECRET_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+  const { data: created, error } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { name },
+  });
+  if (error || !created.user) {
+    const exists = /already|registered|exists/i.test(error?.message ?? '');
+    return fail(exists ? 409 : 400, exists ? 'An account with this email already exists. Sign in instead, or use "Forgot password?".' : error?.message ?? 'Could not create account');
+  }
+
+  const { data: row, error: profileError } = await admin
+    .from('profiles')
+    .insert({ id: created.user.id, name, email, role: 'authorized', must_change_password: false, created_by: 'Self-registered' })
+    .select('*')
+    .single<ProfileRow>();
+  if (profileError || !row) {
+    await admin.auth.admin.deleteUser(created.user.id);
+    return fail(500, profileError?.message ?? 'Could not create profile');
+  }
+  recentRegistrations.set(clientIp, [...recent, now]);
+  return { status: 201, body: { user: toUser(row) } };
+}

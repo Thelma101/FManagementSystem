@@ -5,7 +5,7 @@ import path from 'node:path'
 
 import siteConfiguration from './.figma/make/site.json'
 import { handleWhatsAppCheck, waConfigStatus, type WaEnv } from './server/whatsappCheck'
-import { handleAdminUsers, type AdminEnv } from './server/adminUsers'
+import { handleAdminUsers, handleRegister, type AdminEnv } from './server/adminUsers'
 import { handleSms, type SmsEnv } from './server/smsSend'
 
 
@@ -61,7 +61,7 @@ type ServerEnv = WaEnv & AdminEnv & SmsEnv
 function serverApi(env: ServerEnv): Plugin {
   const middleware: Connect.NextHandleFunction = (req, res, next) => {
     const route = req.url?.split('?')[0]
-    if (route !== '/api/whatsapp/check' && route !== '/api/admin/users' && route !== '/api/sms/send') return next()
+    if (route !== '/api/whatsapp/check' && route !== '/api/admin/users' && route !== '/api/sms/send' && route !== '/api/auth/register') return next()
 
     const send = (status: number, body: unknown) => {
       res.statusCode = status
@@ -96,6 +96,10 @@ function serverApi(env: ServerEnv): Plugin {
         }
         if (route === '/api/sms/send') {
           const result = await handleSms(req.method, req.headers.authorization, body, env)
+          return send(result.status, result.body)
+        }
+        if (route === '/api/auth/register') {
+          const result = await handleRegister(req.method, body, env, req.socket.remoteAddress)
           return send(result.status, result.body)
         }
         if (req.method !== 'POST') return send(405, { error: 'Method not allowed' })

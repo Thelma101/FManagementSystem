@@ -46,6 +46,29 @@ export async function verifyMfa(userId: string, code: string): Promise<MfaResult
   return { ok: true, user };
 }
 
+/** Demo self-registration: lowest role, signed in straight away. */
+export async function register(name: string, email: string, password: string): Promise<MfaResult> {
+  await delay(400);
+  const users = store.getUsers();
+  const addr = email.trim().toLowerCase();
+  if (users.some((u) => u.email.toLowerCase() === addr)) {
+    return { ok: false, error: 'An account with this email already exists. Sign in instead.' };
+  }
+  const user: AuthUser = {
+    id: 'u' + Date.now(),
+    name: name.trim(),
+    email: addr,
+    role: 'authorized',
+    passwordHash: password,
+    mfaCode: String(Math.floor(100000 + Math.random() * 900000)),
+    createdBy: 'Self-registered',
+    createdAt: new Date().toISOString(),
+  };
+  store.saveUsers([...users, user]);
+  store.setCurrentUser(user);
+  return { ok: true, user };
+}
+
 export function logout(): void {
   store.setCurrentUser(null);
 }

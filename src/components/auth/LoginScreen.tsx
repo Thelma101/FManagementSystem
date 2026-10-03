@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { login, verifyMfa } from '../../lib/mockApi';
+import { login, verifyMfa, register as demoRegister } from '../../lib/mockApi';
 import { isCloud } from '../../lib/supabase';
-import { requestPasswordReset, signIn } from '../../lib/cloud';
+import { register as cloudRegister, requestPasswordReset, signIn } from '../../lib/cloud';
+import { MIN_PASSWORD_LENGTH, passwordError } from '../../lib/passwordRules';
 import type { AuthUser } from '../../types';
 
 interface Props { onLogin: (user: AuthUser) => void; }
@@ -22,10 +23,11 @@ function LfcCrest({ size = 72 }: { size?: number }) {
   );
 }
 
-type Step = 'credentials' | 'mfa' | 'reset';
+type Step = 'credentials' | 'mfa' | 'reset' | 'register';
 
 const HEADINGS: Record<Step, { badge: string; title: string; subtitle: string }> = {
   credentials: { badge: 'Secure Portal Access', title: 'Welcome back', subtitle: 'Sign in to access the communications portal.' },
+  register: { badge: 'New Account', title: 'Create an account', subtitle: 'You start as an Authorized user. A Super Admin can give you more access.' },
   mfa: { badge: 'Two-Factor Verification', title: "Verify it's you", subtitle: 'Enter the 6-digit code from your authenticator.' },
   reset: { badge: 'Password Reset', title: 'Forgot password?', subtitle: "Enter your email and we'll send you a link to set a new password." },
 };
@@ -35,6 +37,8 @@ export default function LoginScreen({ onLogin }: Props) {
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [mfaCode, setMfaCode]   = useState('');
+  const [name, setName]         = useState('');
+  const [confirmPw, setConfirmPw] = useState('');
   const [pendingUserId, setPendingUserId] = useState('');
   const [mfaHint, setMfaHint]   = useState('');
   const [showPw, setShowPw]     = useState(false);
@@ -87,8 +91,23 @@ export default function LoginScreen({ onLogin }: Props) {
     else setInfo(`If ${email.trim()} has portal access, a reset link is on its way. Check your inbox (and spam folder).`);
   }
 
+  async function handleRegister(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    if (name.trim().length < 2) { setError('Enter your full name.'); return; }
+    const pwError = passwordError(password);
+    if (pwError) { setError(pwError); return; }
+    if (password !== confirmPw) { setError('The two passwords do not match.'); return; }
+    setLoading(true);
+    const res = isCloud ? await cloudRegister(name.trim(), email, password) : await demoRegister(name, email, password);
+    setLoading(false);
+    if (res.ok) onLogin(res.user);
+    else setError(res.error);
+  }
+
   function backToCredentials() {
     setStep('credentials');
+    setConfirmPw('');
     setMfaCode('');
     setError('');
     setInfo('');
@@ -324,6 +343,48 @@ export default function LoginScreen({ onLogin }: Props) {
                   Forgot password?
                 </button>
               )}
+
+              <p style={{ fontSize: '13.5px', color: '#64748B', textAlign: 'center' }}>
+                New here?{' '}
+                <button type="button" className="btn btn-ghost btn-sm" style={{ color: 'var(--navy)', fontWeight: 600 }}
+                  onClick={() => { setStep('register'); setError(''); setPassword(''); }}>
+                  Create an account
+                </button>
+              </p>
+            </form>
+          ) : step === 'register' ? (
+            <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label className="label">Full name</label>
+                <input className="input" value={name} onChange={(e) => setName(e.target.value)}
+                  required placeholder="e.g. Adaeze Okonkwo" autoComplete="name" autoFocus />
+              </div>
+              <div>
+                <label className="label">Email address</label>
+                <input type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)}
+                  required placeholder="you@fellowship.church" autoComplete="email" />
+              </div>
+              <div>
+                <label className="label">Password</label>
+                <input type={showPw ? 'text' : 'password'} className="input" value={password} onChange={(e) => setPassword(e.target.value)}
+                  required minLength={MIN_PASSWORD_LENGTH} placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`} autoComplete="new-password" />
+              </div>
+              <div>
+                <label className="label">Confirm password</label>
+                <input type={showPw ? 'text' : 'password'} className="input" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)}
+                  required placeholder="Type it again" autoComplete="new-password" />
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', color: '#64748B', cursor: 'pointer' }}>
+                <input type="checkbox" checked={showPw} onChange={(e) => setShowPw(e.target.checked)} /> Show passwords
+              </label>
+              {error && <div className="alert alert-red">{error}</div>}
+              <button type="submit" disabled={loading} className="btn btn-primary"
+                style={{ width: '100%', padding: '11px', fontSize: '14.5px', fontWeight: 600 }}>
+                {loading ? 'Creating account…' : 'Create account'}
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={backToCredentials} style={{ width: '100%' }}>
+                ← Already have an account? Sign in
+              </button>
             </form>
           ) : step === 'reset' ? (
             <form onSubmit={handleReset} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
