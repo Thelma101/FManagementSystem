@@ -22,6 +22,8 @@ export interface Contact {
   addedBy: string;
   addedAt: string;
   tags: string[];
+  /** ContactGroup ids */
+  groupIds?: string[];
   notes: string;
   lastContacted?: string;
   archived?: boolean;
@@ -49,6 +51,14 @@ export interface Contact {
   custom?: Record<string, CustomValue>;
 
   welcomeSentAt?: string;
+}
+
+export interface ContactGroup {
+  id: string;
+  name: string;
+  description: string;
+  createdBy?: string;
+  createdAt?: string;
 }
 
 export type FieldType = 'yesno' | 'text' | 'date' | 'choice';
@@ -88,6 +98,10 @@ export interface MessageLog {
   channel: MessageChannel;
   content: string;
   status: MessageStatus;
+  /** Why it failed, or the network's delivery report. */
+  statusDetail?: string;
+  /** When the delivery report came in. */
+  statusAt?: string;
   sentAt: string;
   sentBy: string;
   kind?: 'welcome' | 'broadcast' | 'direct' | 'scheduled';
@@ -102,14 +116,30 @@ export interface ScheduledEvent {
   description: string;
   frequency: ScheduleFrequency;
   dayOfWeek?: DayOfWeek; // for weekly
-  time: string; // HH:mm
-  date?: string; // ISO date for once/annually
+  time: string; // HH:mm, Nigerian time
+  date?: string; // YYYY-MM-DD: first weekly occurrence, or the monthly date
   leadTimeHours: number[];
   messageTemplate: string;
   channels: ('sms' | 'whatsapp')[];
   active: boolean;
+  /** Set by the server only. */
   nextTrigger?: string;
   createdBy: string;
+  /** Who gets it: everyone (default), one group, or everyone with a tag. */
+  audienceType?: 'all' | 'group' | 'tag';
+  audienceValue?: string;
+}
+
+export interface ActivityEntry {
+  id: number;
+  at: string;
+  actorName: string;
+  action: string;
+  entity: string;
+  entityId?: string;
+  label?: string;
+  detail?: string;
+  changes?: Record<string, [unknown, unknown]>;
 }
 
 export interface AttendanceRecord {
@@ -138,4 +168,4 @@ export interface AppState {
   activeTab: Tab;
 }
 
-export type Tab = 'dashboard' | 'contacts' | 'messaging' | 'attendance' | 'reports' | 'schedule' | 'users';
+export type Tab = 'dashboard' | 'contacts' | 'messaging' | 'attendance' | 'reports' | 'schedule' | 'users' | 'activity';

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Contact, MessageLog, ScheduledEvent, AuthUser, Tab } from '../../types';
+import { nextSend } from '../../lib/schedule';
 
 function LiveClock() {
   const [now, setNow] = useState(() => new Date());
@@ -70,9 +71,11 @@ export default function Dashboard({ user, contacts, logs, events, onNavigate }: 
     .sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime())
     .slice(0, 6);
 
-  const upcomingEvents = [...events]
-    .filter((e) => e.active && e.nextTrigger)
-    .sort((a, b) => new Date(a.nextTrigger!).getTime() - new Date(b.nextTrigger!).getTime())
+  const upcomingEvents = events
+    .filter((e) => e.active)
+    .map((e) => ({ ...e, sendAt: nextSend(e)?.at }))
+    .filter((e) => e.sendAt !== undefined)
+    .sort((a, b) => a.sendAt! - b.sendAt!)
     .slice(0, 5);
 
   const hour = new Date().getHours();
@@ -216,7 +219,7 @@ export default function Dashboard({ user, contacts, logs, events, onNavigate }: 
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ fontSize: '13px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.name}</p>
-                    <p style={{ fontSize: '12px', color: 'var(--text-3)' }}>{ev.nextTrigger ? fmtDate(ev.nextTrigger) : '—'}</p>
+                    <p style={{ fontSize: '12px', color: 'var(--text-3)' }}>Next reminder: {fmtDate(new Date(ev.sendAt!).toISOString())}, {new Date(ev.sendAt!).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos' })}</p>
                   </div>
                   <span className="badge badge-green" style={{ fontSize: '10.5px' }}>Live</span>
                 </div>

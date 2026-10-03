@@ -4,7 +4,7 @@
 // using the synchronous store API. Each store save is diffed against the previous
 // copy and the changed rows are written to Supabase in order.
 
-import type { AuthUser, UserRole } from '../types';
+import type { ActivityEntry, AuthUser, MessageLog, UserRole } from '../types';
 import { store, type CollectionKey } from './store';
 import { supabase } from './supabase';
 
@@ -14,6 +14,10 @@ interface TableSpec {
   columns: string[];
   /** Fields stored as Postgres dates/timestamps — empty strings are saved as null */
   dates?: string[];
+  /** Loaded but never written from the browser (the server owns them) */
+  readOnly?: string[];
+  /** Saved instead of null for required columns */
+  defaults?: Record<string, unknown>;
   order: string;
   ascending?: boolean;
 }
@@ -25,9 +29,10 @@ const TABLES: Record<Exclude<CollectionKey, 'fp_users'>, TableSpec> = {
       'id', 'name', 'phone', 'addedBy', 'addedAt',
       'tags', 'notes', 'lastContacted', 'archived', 'metLocation', 'metDate', 'bornAgain', 'salvationDate',
       'salvationPlace', 'baptised', 'baptismDate', 'inCellFellowship', 'cellName', 'attendanceCommitment',
-      'committedServices', 'committedSpecialEvent', 'welcomeSentAt', 'baptismPlace', 'custom',
+      'committedServices', 'committedSpecialEvent', 'welcomeSentAt', 'baptismPlace', 'custom', 'groupIds',
     ],
     dates: ['addedAt', 'lastContacted', 'metDate', 'salvationDate', 'baptismDate', 'welcomeSentAt'],
+    defaults: { groupIds: [] },
     order: 'added_at',
   },
   fp_attendance: {
@@ -38,18 +43,31 @@ const TABLES: Record<Exclude<CollectionKey, 'fp_users'>, TableSpec> = {
   },
   fp_logs: {
     table: 'message_logs',
-    columns: ['id', 'contactId', 'contactName', 'contactPhone', 'channel', 'content', 'status', 'sentAt', 'sentBy', 'kind'],
-    dates: ['sentAt'],
+    columns: [
+      'id', 'contactId', 'contactName', 'contactPhone', 'channel', 'content', 'status', 'statusDetail', 'statusAt',
+      'sentAt', 'sentBy', 'kind',
+    ],
+    dates: ['sentAt', 'statusAt'],
+    readOnly: ['statusAt'],
     order: 'sent_at',
   },
   fp_events: {
     table: 'events',
     columns: [
       'id', 'name', 'description', 'frequency', 'dayOfWeek', 'time', 'date', 'leadTimeHours', 'messageTemplate',
-      'channels', 'active', 'nextTrigger', 'createdBy',
+      'channels', 'active', 'nextTrigger', 'createdBy', 'audienceType', 'audienceValue',
     ],
     dates: ['nextTrigger'],
+    readOnly: ['nextTrigger'],
+    defaults: { audienceType: 'all' },
     order: 'id',
+    ascending: true,
+  },
+  fp_groups: {
+    table: 'contact_groups',
+    columns: ['id', 'name', 'description', 'createdBy', 'createdAt'],
+    dates: ['createdAt'],
+    order: 'name',
     ascending: true,
   },
   fp_welcome_templates: {
@@ -73,8 +91,9 @@ type Row = Record<string, unknown>;
 function toRow(spec: TableSpec, item: Row): Row {
   const row: Row = {};
   for (const key of spec.columns) {
+    if (spec.readOnly?.includes(key)) continue;
     let v = item[key];
-    if (v === undefined || (v === '' && spec.dates?.includes(key))) v = null;
+    if (v === undefined || (v === '' && spec.dates?.includes(key))) v = spec.defaults?.[key] ?? null;
     row[snake(key)] = v;
   }
   return row;
@@ -213,6 +232,42 @@ export async function refreshIfStale(maxAgeMs = 60_000): Promise<boolean> {
   await chain;
   await loadAll();
   return true;
+}
+
+/** Re-reads message history to pick up delivery reports and scheduled sends. */
+export async function refreshLogs(): Promise<MessageLog[]> {
+  await chain;
+  const spec = TABLES.fp_logs;
+  const logs = (await fetchAll(spec.table, spec.order, spec.ascending)).map((r) => fromRow(spec, r)) as unknown as MessageLog[];
+  store.replaceFromCloud('fp_logs', logs);
+  return logs;
+}
+
+export interface ActivityFilter {
+  entity?: string;
+  actor?: string;
+  since?: string;
+}
+
+/** Latest activity-log entries (Admins only; others get an empty list from the database). */
+export async function loadActivity(filter: ActivityFilter = {}, limit = 500): Promise<ActivityEntry[]> {
+  let q = client().from('activity_log').select('*').order('at', { ascending: false }).limit(limit);
+  if (filter.entity) q = q.eq('entity', filter.entity);
+  if (filter.actor) q = q.eq('actor_name', filter.actor);
+  if (filter.since) q = q.gte('at', filter.since);
+  const { data, error } = await q;
+  if (error) throw new Error(`Could not load the activity log: ${error.message}`);
+  return (data as Row[]).map((r) => ({
+    id: r.id as number,
+    at: r.at as string,
+    actorName: r.actor_name as string,
+    action: r.action as string,
+    entity: r.entity as string,
+    entityId: (r.entity_id as string | null) ?? undefined,
+    label: (r.label as string | null) ?? undefined,
+    detail: (r.detail as string | null) ?? undefined,
+    changes: (r.changes as ActivityEntry['changes'] | null) ?? undefined,
+  }));
 }
 
 // ── Auth ──────────────────────────────────────────────────────────────────────

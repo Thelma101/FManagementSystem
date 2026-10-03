@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import type { AttendanceCommitment, AuthUser, Contact, CustomValue, ServiceType } from '../../types';
+import type { AttendanceCommitment, AuthUser, Contact, ContactGroup, CustomValue, ServiceType } from '../../types';
 import { activeFields, cleanCustom } from '../../lib/customFields';
 import { store } from '../../lib/store';
 import { parsePhone } from '../../lib/phone';
@@ -29,6 +29,7 @@ type FormState = {
   name: string;
   phone: string;
   tags: string[];
+  groupIds: string[];
   notes: string;
   metLocation: string;
   metDate: string;
@@ -51,6 +52,7 @@ function initialForm(c?: Contact): FormState {
     name: c?.name ?? '',
     phone: c?.phone ?? '',
     tags: c ? [...c.tags] : ['harvest-field'],
+    groupIds: [...(c?.groupIds ?? [])],
     notes: c?.notes ?? '',
     metLocation: c?.metLocation ?? '',
     metDate: c?.metDate ?? (c ? '' : todayIso()),
@@ -73,6 +75,7 @@ interface Props {
   mode: 'add' | 'edit';
   contact?: Contact;
   contacts: Contact[];
+  groups: ContactGroup[];
   user: AuthUser;
   onSave: (contact: Contact, welcome?: WelcomeOptions) => void;
   onClose: () => void;
@@ -80,7 +83,7 @@ interface Props {
 }
 
 export default function ContactFormModal({
-  mode, contact, contacts, user, onSave, onClose, onOpenExisting,
+  mode, contact, contacts, groups, user, onSave, onClose, onOpenExisting,
 }: Props) {
   const { toast } = useToast();
   const [form, setForm] = useState<FormState>(() => initialForm(contact));
@@ -183,6 +186,7 @@ export default function ContactFormModal({
       name: form.name.trim(),
       phone: parsed.e164,
       tags: form.tags,
+      groupIds: form.groupIds.filter((id) => groups.some((g) => g.id === id)),
       notes: form.notes.trim(),
       metLocation: form.metLocation.trim() || undefined,
       metDate: form.metDate || undefined,
@@ -427,7 +431,20 @@ export default function ContactFormModal({
 
             {/* ── Tags & notes ──────────────────────────────────────────── */}
             <div className="form-section">
-              <p className="form-section-title">Tags & notes</p>
+              <p className="form-section-title">{groups.length ? 'Groups, tags & notes' : 'Tags & notes'}</p>
+              {groups.length > 0 && (
+                <div>
+                  <label className="label">Groups</label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                    {groups.map((g) => (
+                      <button key={g.id} type="button" onClick={() => set('groupIds', toggleIn(form.groupIds, g.id))}
+                        className={`chip ${form.groupIds.includes(g.id) ? 'chip-on' : ''}`} title={g.description || undefined}>
+                        {g.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                 {TAG_OPTIONS.map((t) => (
                   <button key={t} type="button" onClick={() => set('tags', toggleIn(form.tags, t))}

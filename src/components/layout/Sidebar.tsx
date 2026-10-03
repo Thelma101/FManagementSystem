@@ -20,6 +20,7 @@ export const NAV_ITEMS: { id: Tab; label: string; short: string; icon: string; b
   { id: 'reports',    label: 'Reports',    short: 'Reports',  icon: 'M18 20V10M12 20V4M6 20v-6' },
   { id: 'schedule',   label: 'Schedule',   short: 'Schedule', badge: 'schedules', icon: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01' },
   { id: 'users',      label: 'Users',      short: 'Users',    adminOnly: true, icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z' },
+  { id: 'activity',   label: 'Activity',   short: 'Activity', adminOnly: true, icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
 ];
 
 function Icon({ d, size = 16 }: { d: string; size?: number }) {

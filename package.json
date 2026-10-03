@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "format": "oxfmt",
     "db:migrate": "node --env-file=.env.local scripts/db-migrate.mjs",
+    "cron:setup": "node --env-file=.env.local scripts/setup-cron.mjs",
     "create-superadmin": "node --env-file=.env.local scripts/create-superadmin.mjs"
   },
   "dependencies": {

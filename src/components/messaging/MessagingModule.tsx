@@ -1,15 +1,28 @@
 import { useEffect, useState, useMemo } from 'react';
-import type { Contact, MessageLog, AuthUser } from '../../types';
+import type { Contact, ContactGroup, MessageLog, MessageStatus, AuthUser } from '../../types';
 import { store } from '../../lib/store';
 import { sendMessage } from '../../lib/api';
+import { refreshLogs } from '../../lib/cloud';
+import { newMessageId } from '../../lib/schedule';
 import { useToast } from '../ui/Toast';
 import SmsCounter from '../ui/SmsCounter';
 import { toGsm } from '../../lib/sms';
 import { getSmsGatewayStatus, type SmsGatewayStatus } from '../../lib/smsGateway';
 
+const STATUS_LABEL: Record<MessageStatus, string> = { delivered: 'Delivered', sent: 'Sent', failed: 'Failed', pending: 'Unconfirmed' };
+const STATUS_BADGE: Record<MessageStatus, string> = { delivered: 'badge-green', sent: 'badge-blue', failed: 'badge-red', pending: 'badge-amber' };
+
+function statusHint(log: MessageLog): string {
+  if (log.statusDetail) return log.statusDetail;
+  if (log.status === 'sent') return log.channel === 'sms' ? 'Accepted for sending. Waiting for the delivery report.' : 'Accepted for sending. WhatsApp does not report delivery.';
+  if (log.status === 'delivered') return 'Delivered to the phone';
+  return '';
+}
+
 interface Props {
   user: AuthUser;
   contacts: Contact[];
+  groups: ContactGroup[];
   logs: MessageLog[];
   onLogsChange: (l: MessageLog[]) => void;
   onContactsChange: (c: Contact[]) => void;
@@ -24,7 +37,7 @@ const TEMPLATES = [
   { label: 'Youth Programme',      text: 'Dear {name}, our Youth Programme holds this Saturday! Bring a friend and celebrate God\'s grace. You are specially invited! - Living Faith Church' },
 ];
 
-export default function MessagingModule({ user, contacts, logs, onLogsChange, onContactsChange }: Props) {
+export default function MessagingModule({ user, contacts, groups, logs, onLogsChange, onContactsChange }: Props) {
   const { toast } = useToast();
   const [tab, setTab] = useState<'compose' | 'history'>('compose');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -35,13 +48,39 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
   const [contactSearch, setContactSearch] = useState('');
   const [logSearch, setLogSearch] = useState('');
   const [logFilterCh, setLogFilterCh] = useState('');
+  const [logFilterStatus, setLogFilterStatus] = useState('');
   const [gateway, setGateway] = useState<SmsGatewayStatus | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (sending === null) void getSmsGatewayStatus().then(setGateway);
   }, [sending]);
 
+  function reloadHistory() {
+    setRefreshing(true);
+    refreshLogs()
+      .then(onLogsChange)
+      .catch(() => toast('error', 'Could not refresh message history'))
+      .finally(() => setRefreshing(false));
+  }
+
+  // Delivery reports and scheduled reminders arrive in the background.
+  useEffect(() => {
+    if (tab === 'history') reloadHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
   const activeContacts = contacts.filter((c) => !c.archived);
+  const tags = useMemo(() => [...new Set(activeContacts.flatMap((c) => c.tags))].sort(), [activeContacts]);
+
+  function addAudience(value: string) {
+    const [kind, key] = [value.slice(0, value.indexOf(':')), value.slice(value.indexOf(':') + 1)];
+    const members = activeContacts.filter((c) => (kind === 'group' ? c.groupIds?.includes(key) : c.tags.includes(key)));
+    if (!members.length) { toast('info', 'Nobody to add', 'No active contacts are in it yet.'); return; }
+    setSelectedIds((s) => new Set([...s, ...members.map((c) => c.id)]));
+    const name = kind === 'group' ? groups.find((g) => g.id === key)?.name : key;
+    toast('success', `Added ${members.length} from ${name}`);
+  }
 
   const filteredContacts = activeContacts.filter((c) => {
     const q = contactSearch.toLowerCase();
@@ -53,9 +92,10 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
       const q = logSearch.toLowerCase();
       if (q && !l.contactName.toLowerCase().includes(q) && !l.content.toLowerCase().includes(q)) return false;
       if (logFilterCh && l.channel !== logFilterCh) return false;
+      if (logFilterStatus && l.status !== logFilterStatus) return false;
       return true;
     }).sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
-  }, [logs, logSearch, logFilterCh]);
+  }, [logs, logSearch, logFilterCh, logFilterStatus]);
 
   const previewText = useMemo(() => {
     if (!msgText) return '';
@@ -83,8 +123,9 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
     for (let i = 0; i < eligible.length; i++) {
       const c = eligible[i];
       const text = msgText.replace(/{name}/g, c.name.split(' ')[0]);
-      const r = await sendMessage(c.phone, channel, text);
-      newLogs.push({ id: 'ml' + Date.now() + i, contactId: c.id, contactName: c.name, contactPhone: c.phone, channel, content: text, status: r.status, sentAt: now, sentBy: user.name, kind: 'broadcast' });
+      const id = newMessageId();
+      const r = await sendMessage(c.phone, channel, text, id);
+      newLogs.push({ id, contactId: c.id, contactName: c.name, contactPhone: c.phone, channel, content: text, status: r.status, statusDetail: r.error, sentAt: now, sentBy: user.name, kind: 'broadcast' });
       if (r.success) { success++; reached.add(c.id); }
       setProgress(Math.round(((i + 1) / eligible.length) * 100));
       if (r.fatal) { stopped = r.error; break; }
@@ -193,8 +234,32 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
                       <button onClick={clearAll} style={{ color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}>Clear</button>
                     </div>
                   </div>
-                  <input type="text" className="input" value={contactSearch} onChange={(e) => setContactSearch(e.target.value)}
-                    placeholder="Filter contacts…" style={{ marginBottom: '6px' }} />
+                  <div style={{ display: 'flex', gap: '6px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                    <input type="text" className="input" value={contactSearch} onChange={(e) => setContactSearch(e.target.value)}
+                      placeholder="Filter contacts…" style={{ flex: 1, minWidth: '160px' }} />
+                    {(groups.length > 0 || tags.length > 0) && (
+                      <select className="input" value="" onChange={(e) => e.target.value && addAudience(e.target.value)}
+                        style={{ width: 'auto', minWidth: '170px' }} aria-label="Add a whole group or tag">
+                        <option value="">+ Add a group or tag…</option>
+                        {groups.length > 0 && (
+                          <optgroup label="Groups">
+                            {groups.map((g) => (
+                              <option key={g.id} value={`group:${g.id}`}>
+                                {g.name} ({activeContacts.filter((c) => c.groupIds?.includes(g.id)).length})
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {tags.length > 0 && (
+                          <optgroup label="Tags">
+                            {tags.map((t) => (
+                              <option key={t} value={`tag:${t}`}>{t} ({activeContacts.filter((c) => c.tags.includes(t)).length})</option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                    )}
+                  </div>
                   <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)' }}>
                     {filteredContacts.map((c) => (
                       <label key={c.id} style={{
@@ -255,8 +320,8 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
                   {gateway && (
                     <p style={{ fontSize: '12px', color: gateway.configured ? 'var(--text-3)' : 'var(--amber)', marginTop: '6px' }}>
                       {gateway.configured
-                        ? `Messages go out through eBulkSMS: SMS as "${gateway.sender}", WhatsApp from the church number connected on ebulksms.com${gateway.balance !== undefined ? ` · ${gateway.balance} units left` : ''}.`
-                        : 'Sending is not set up: add the eBulkSMS settings on the server before messages can go out.'}
+                        ? `SMS goes out as "${gateway.sender}"; WhatsApp from the church's connected WhatsApp number${gateway.balance !== undefined ? ` · ${gateway.balance} SMS units left` : ''}.`
+                        : 'Sending is not set up: add the SMS settings on the server before messages can go out.'}
                     </p>
                   )}
                 </div>
@@ -284,8 +349,8 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
         ) : (
           /* History */
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-            <div style={{ padding: '14px 24px', borderBottom: '1px solid var(--border)', display: 'flex', gap: '8px', flexShrink: 0, background: 'var(--surface)' }}>
-              <div style={{ position: 'relative', flex: 1 }}>
+            <div style={{ padding: '14px 24px', borderBottom: '1px solid var(--border)', display: 'flex', gap: '8px', flexShrink: 0, flexWrap: 'wrap', background: 'var(--surface)' }}>
+              <div style={{ position: 'relative', flex: 1, minWidth: '200px' }}>
                 <input type="text" className="input" value={logSearch} onChange={(e) => setLogSearch(e.target.value)}
                   placeholder="Search by name or message content…" style={{ paddingLeft: '30px' }} />
                 <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-3)', pointerEvents: 'none', display: 'flex' }}>
@@ -300,6 +365,13 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
                 <option value="whatsapp">WhatsApp</option>
                 <option value="both">SMS + WhatsApp</option>
               </select>
+              <select className="input" value={logFilterStatus} onChange={(e) => setLogFilterStatus(e.target.value)} style={{ width: 'auto', minWidth: '130px' }}>
+                <option value="">All statuses</option>
+                {(Object.keys(STATUS_LABEL) as MessageStatus[]).map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
+              </select>
+              <button className="btn btn-outline btn-sm" onClick={reloadHistory} disabled={refreshing} title="Check for new delivery reports">
+                {refreshing ? 'Refreshing…' : 'Refresh'}
+              </button>
             </div>
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {filteredLogs.length === 0 ? (
@@ -318,7 +390,7 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
                     <tr>
                       <th style={{ paddingLeft: '24px' }}>Recipient</th>
                       <th>Channel</th>
-                      <th>Message</th>
+                      <th className="col-message">Message</th>
                       <th>Date</th>
                       <th style={{ textAlign: 'right', paddingRight: '24px' }}>Status</th>
                     </tr>
@@ -341,12 +413,16 @@ export default function MessagingModule({ user, contacts, logs, onLogsChange, on
                           </p>
                         </td>
                         <td style={{ color: 'var(--text-3)', fontSize: '12.5px', whiteSpace: 'nowrap' }}>
-                          {new Date(log.sentAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          {new Date(log.sentAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          <p style={{ fontSize: '11.5px', color: 'var(--text-4)' }}>{log.kind === 'scheduled' ? log.sentBy : `by ${log.sentBy}`}</p>
                         </td>
-                        <td style={{ textAlign: 'right', paddingRight: '24px' }}>
-                          <span className={`badge ${log.status === 'delivered' ? 'badge-green' : log.status === 'failed' ? 'badge-red' : log.status === 'sent' ? 'badge-blue' : 'badge-amber'}`}>
-                            {log.status}
+                        <td style={{ textAlign: 'right', paddingRight: '24px', maxWidth: '220px' }}>
+                          <span className={`badge ${STATUS_BADGE[log.status] ?? 'badge-amber'}`} title={statusHint(log)}>
+                            {STATUS_LABEL[log.status] ?? log.status}
                           </span>
+                          {(log.status === 'failed' || log.status === 'pending') && log.statusDetail && (
+                            <p style={{ fontSize: '11.5px', color: 'var(--text-3)', marginTop: '3px', whiteSpace: 'normal' }}>{log.statusDetail}</p>
+                          )}
                         </td>
                       </tr>
                     ))}

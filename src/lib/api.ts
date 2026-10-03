@@ -12,18 +12,18 @@ export type { CountryCode, PhoneParseResult } from './phone';
 export interface SendResult {
   success: boolean;
   channels: string[];
-  /** 'sent' = accepted by eBulkSMS; 'failed' otherwise. Older logs may also say 'delivered'. */
+  /** 'sent' = accepted for sending; a delivery report later turns SMS into 'delivered' or 'failed'. */
   status: MessageStatus;
   error?: string;
-  /** The gateway account can't send anything right now (no credit, bad key…); stop bulk sends. */
+  /** The messaging account can't send anything right now (no credit, bad key…); stop bulk sends. */
   fatal?: boolean;
 }
 
-const NOT_CONFIGURED_ERROR = 'Sending is not set up yet: the eBulkSMS settings are missing on the server.';
+const NOT_CONFIGURED_ERROR = 'Sending is not set up yet: the SMS settings are missing on the server.';
 
-/** SMS and WhatsApp both go through eBulkSMS on the server. */
-export async function sendMessage(phone: string, channel: 'sms' | 'whatsapp', content: string): Promise<SendResult> {
-  const r = await sendViaGateway(phone, channel === 'sms' ? toGsm(content) : content, channel);
+/** Sends through the server. Pass the message-history id so delivery reports can find the log. */
+export async function sendMessage(phone: string, channel: 'sms' | 'whatsapp', content: string, logId?: string): Promise<SendResult> {
+  const r = await sendViaGateway(phone, channel === 'sms' ? toGsm(content) : content, channel, logId);
   if (!r.configured) return { success: false, channels: [], status: 'failed', error: NOT_CONFIGURED_ERROR, fatal: true };
   if (!r.ok) return { success: false, channels: [], status: 'failed', error: r.error, fatal: r.fatal };
   return { success: true, channels: [channel === 'whatsapp' ? 'WhatsApp' : 'SMS'], status: 'sent' };

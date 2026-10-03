@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { AuthUser, Contact, MessageLog, ScheduledEvent, Tab } from './types';
+import type { AuthUser, Contact, ContactGroup, MessageLog, ScheduledEvent, Tab } from './types';
 import { store } from './lib/store';
 import { canManageUsers } from './lib/permissions';
 import { isConfigured, openedFromRecoveryLink } from './lib/supabase';
@@ -15,6 +15,7 @@ import AttendanceModule from './components/attendance/AttendanceModule';
 import ReportsModule from './components/reports/ReportsModule';
 import ScheduleModule from './components/schedule/ScheduleModule';
 import UsersModule from './components/users/UsersModule';
+import ActivityModule from './components/activity/ActivityModule';
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
@@ -43,6 +44,7 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [logs, setLogs]         = useState<MessageLog[]>([]);
   const [events, setEvents]     = useState<ScheduledEvent[]>([]);
+  const [groups, setGroups]     = useState<ContactGroup[]>([]);
   const isMobile = useIsMobile();
   const { toast } = useToast();
 
@@ -50,6 +52,7 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
     setContacts(store.getContacts());
     setLogs(store.getLogs());
     setEvents(store.getEvents());
+    setGroups(store.getGroups());
   }
 
   useEffect(reloadFromStore, []);
@@ -119,10 +122,13 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
           <Dashboard user={user} contacts={contacts} logs={logs} events={events} onNavigate={handleTabChange} />
         )}
         {tab === 'contacts' && (
-          <ContactsModule user={user} contacts={contacts} onContactsChange={setContacts} onLogAdded={(log) => setLogs((p) => [log, ...p])} />
+          <ContactsModule
+            user={user} contacts={contacts} groups={groups}
+            onContactsChange={setContacts} onGroupsChange={setGroups} onLogAdded={(log) => setLogs((p) => [log, ...p])}
+          />
         )}
         {tab === 'messaging' && (
-          <MessagingModule user={user} contacts={contacts} logs={logs} onLogsChange={setLogs} onContactsChange={setContacts} />
+          <MessagingModule user={user} contacts={contacts} groups={groups} logs={logs} onLogsChange={setLogs} onContactsChange={setContacts} />
         )}
         {tab === 'attendance' && (
           <AttendanceModule user={user} contacts={contacts} />
@@ -131,10 +137,13 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
           <ReportsModule contacts={contacts} />
         )}
         {tab === 'schedule' && (
-          <ScheduleModule user={user} events={events} onEventsChange={setEvents} />
+          <ScheduleModule user={user} events={events} contacts={contacts} groups={groups} onEventsChange={setEvents} />
         )}
         {tab === 'users' && canManageUsers(user) && (
           <UsersModule currentUser={user} />
+        )}
+        {tab === 'activity' && canManageUsers(user) && (
+          <ActivityModule />
         )}
       </main>
 

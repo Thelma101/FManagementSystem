@@ -12,6 +12,9 @@ import { createClient } from '@supabase/supabase-js';
 import type { AuthUser, UserRole } from '../src/types/index.js';
 import { assignableRoles, canManageUser, canManageUsers } from '../src/lib/permissions.js';
 import { passwordError } from '../src/lib/passwordRules.js';
+import { recordActivity } from './activity.js';
+
+const ROLE_LABEL: Record<UserRole, string> = { superadmin: 'Super Admin', admin: 'Admin', authorized: 'Authorised user' };
 
 export interface AdminEnv {
   SUPABASE_URL?: string;
@@ -103,6 +106,10 @@ export async function handleAdminUsers(
       await admin.auth.admin.deleteUser(created.user.id);
       return fail(500, profileError?.message ?? 'Could not create profile');
     }
+    await recordActivity(admin, {
+      actorId: actor.id, actorName: actor.name, action: 'created', entity: 'users', entityId: row.id,
+      label: name, detail: `${email} · ${ROLE_LABEL[role]}`,
+    });
     return { status: 201, body: { user: toUser(row) } };
   }
 
@@ -116,6 +123,10 @@ export async function handleAdminUsers(
     if (method === 'DELETE') {
       const { error } = await admin.auth.admin.deleteUser(id);
       if (error) return fail(500, error.message);
+      await recordActivity(admin, {
+        actorId: actor.id, actorName: actor.name, action: 'removed', entity: 'users', entityId: id,
+        label: target.name, detail: `${target.email} · ${ROLE_LABEL[target.role]} · portal access removed`,
+      });
       return { status: 200, body: { ok: true } };
     }
 
@@ -123,6 +134,12 @@ export async function handleAdminUsers(
     if (!ROLES.includes(role) || !assignableRoles(actor).includes(role)) return fail(403, 'You cannot grant that role');
     const { data: row, error } = await admin.from('profiles').update({ role }).eq('id', id).select('*').single<ProfileRow>();
     if (error || !row) return fail(500, error?.message ?? 'Could not update role');
+    if (role !== target.role) {
+      await recordActivity(admin, {
+        actorId: actor.id, actorName: actor.name, action: 'updated', entity: 'users', entityId: id,
+        label: target.name, changes: { role: [ROLE_LABEL[target.role], ROLE_LABEL[role]] },
+      });
+    }
     return { status: 200, body: { user: toUser(row) } };
   }
 
@@ -183,5 +200,9 @@ export async function handleRegister(
     return fail(500, profileError?.message ?? 'Could not create profile');
   }
   recentRegistrations.set(clientIp, [...recent, now]);
+  await recordActivity(admin, {
+    actorId: row.id, actorName: name, action: 'registered', entity: 'users', entityId: row.id,
+    label: name, detail: `${email} · ${ROLE_LABEL.authorized}`,
+  });
   return { status: 201, body: { user: toUser(row) } };
 }

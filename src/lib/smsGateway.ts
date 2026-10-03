@@ -10,9 +10,8 @@ export type GatewayResult =
 
 export interface SmsGatewayStatus {
   configured: boolean;
-  provider?: string;
   sender?: string;
-  /** eBulkSMS units left (an SMS page costs about 4). */
+  /** SMS units left (an SMS page costs about 4). */
   balance?: number;
 }
 
@@ -21,14 +20,17 @@ async function authHeaders(): Promise<Record<string, string>> {
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
-/** Sends one SMS or WhatsApp message through the server. */
-export async function sendViaGateway(phone: string, message: string, channel: 'sms' | 'whatsapp' = 'sms'): Promise<GatewayResult> {
+/**
+ * Sends one SMS or WhatsApp message through the server. `msgid` is the message-history
+ * id, so the SMS delivery report can update that row later.
+ */
+export async function sendViaGateway(phone: string, message: string, channel: 'sms' | 'whatsapp', msgid?: string): Promise<GatewayResult> {
   let res: Response;
   try {
     res = await fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-      body: JSON.stringify({ phone, message, channel }),
+      body: JSON.stringify({ phone, message, channel, msgid }),
     });
   } catch {
     return { configured: true, ok: false, error: 'Could not reach the server. Check your connection.' };
@@ -49,7 +51,7 @@ export async function getSmsGatewayStatus(): Promise<SmsGatewayStatus> {
   try {
     const res = await fetch(ENDPOINT, { headers: await authHeaders() });
     const data = (await res.json()) as SmsGatewayStatus;
-    return { configured: !!data.configured, provider: data.provider, sender: data.sender, balance: data.balance };
+    return { configured: !!data.configured, sender: data.sender, balance: data.balance };
   } catch {
     return { configured: false };
   }

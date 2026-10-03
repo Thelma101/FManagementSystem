@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import type { ScheduledEvent, AuthUser, DayOfWeek } from '../../types';
+import type { ScheduledEvent, AuthUser, Contact, ContactGroup, DayOfWeek } from '../../types';
 import { store } from '../../lib/store';
 import { canManageSchedules } from '../../lib/permissions';
+import { audienceMembers, audienceOf, nextSend, type Audience } from '../../lib/schedule';
 import { useToast } from '../ui/Toast';
 import SmsCounter from '../ui/SmsCounter';
 import { toGsm } from '../../lib/sms';
@@ -9,6 +10,8 @@ import { toGsm } from '../../lib/sms';
 interface Props {
   user: AuthUser;
   events: ScheduledEvent[];
+  contacts: Contact[];
+  groups: ContactGroup[];
   onEventsChange: (e: ScheduledEvent[]) => void;
 }
 
@@ -34,14 +37,26 @@ type FormState = {
   leadTimeHours: number[];
   messageTemplate: string;
   channels: ('sms' | 'whatsapp')[];
+  audienceType: 'all' | 'group' | 'tag';
+  audienceValue: string;
 };
 
-const EMPTY: FormState = {
-  name: '', description: '', frequency: 'weekly',
-  dayOfWeek: 'Saturday', monthDay: 1,
-  datetime: new Date(Date.now() + 86400000).toISOString().slice(0, 16),
-  leadTimeHours: [24], messageTemplate: '', channels: ['sms', 'whatsapp'],
-};
+/** YYYY-MM-DD in Nigerian time (UTC+1, no daylight saving). */
+function lagosDate(ms: number) {
+  return new Date(ms + 3600000).toISOString().slice(0, 10);
+}
+
+function emptyForm(): FormState {
+  const now = Date.now();
+  const daysToSaturday = (6 - new Date(now + 3600000).getUTCDay() + 7) % 7 || 7;
+  return {
+    name: '', description: '', frequency: 'weekly',
+    dayOfWeek: 'Saturday', monthDay: 1,
+    datetime: `${lagosDate(now + daysToSaturday * 86400000)}T09:00`,
+    leadTimeHours: [24], messageTemplate: '', channels: ['sms'],
+    audienceType: 'all', audienceValue: '',
+  };
+}
 
 function freqBadge(f: Freq) {
   if (f === 'daily')  return <span className="badge badge-blue">Daily</span>;
@@ -49,31 +64,17 @@ function freqBadge(f: Freq) {
   return <span className="badge badge-purple">Monthly</span>;
 }
 
-function computeNextTrigger(form: FormState): string {
-  const [datePart, timePart] = form.datetime.split('T');
-  const [h, m] = (timePart || '09:00').split(':').map(Number);
-  const now = new Date();
-  if (form.frequency === 'daily') {
-    const next = new Date(now); next.setHours(h, m, 0, 0);
-    if (next <= now) next.setDate(next.getDate() + 1);
-    return next.toISOString();
-  }
-  if (form.frequency === 'weekly') {
-    const dayIdx = DAYS.indexOf(form.dayOfWeek);
-    const next = new Date(now);
-    next.setDate(now.getDate() + ((dayIdx - now.getDay() + 7) % 7 || 7));
-    next.setHours(h, m, 0, 0);
-    return next.toISOString();
-  }
-  if (datePart) return new Date(form.datetime).toISOString();
-  const next = new Date(now.getFullYear(), now.getMonth(), form.monthDay, h, m);
-  if (next <= now) next.setMonth(next.getMonth() + 1);
-  return next.toISOString();
+/** Shown in Nigerian time, matching how event times are entered. */
+function fmtDate(ms: number) {
+  return new Date(ms).toLocaleString('en-GB', {
+    weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Lagos',
+  });
 }
 
-function fmtDate(iso?: string) {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+function fmtLeadLong(h: number) {
+  if (h >= 168 && h % 168 === 0) return h === 168 ? '1 week' : `${h / 168} weeks`;
+  if (h >= 24 && h % 24 === 0) return h === 24 ? '1 day' : `${h / 24} days`;
+  return h === 1 ? '1 hour' : `${h} hours`;
 }
 
 function fmtLead(h: number) {
@@ -89,19 +90,19 @@ const FREQ_COLOR: Record<Freq, { bg: string; border: string }> = {
   monthly: { bg: 'var(--purple-bg)', border: 'var(--purple-border)' },
 };
 
-export default function ScheduleModule({ user, events, onEventsChange }: Props) {
+export default function ScheduleModule({ user, events, contacts, groups, onEventsChange }: Props) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<ScheduledEvent | null>(null);
-  const [form, setForm] = useState<FormState>({ ...EMPTY });
+  const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [filterFreq, setFilterFreq] = useState<Freq | ''>('');
 
-  function openAdd() { setForm({ ...EMPTY }); setEditTarget(null); setOpen(true); }
+  function openAdd() { setForm(emptyForm()); setEditTarget(null); setOpen(true); }
 
   function openEdit(ev: ScheduledEvent) {
     const timeStr = ev.time ?? '09:00';
-    const dateStr = ev.date ?? new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    const dateStr = ev.date ?? lagosDate(Date.now() + 86400000);
     setForm({
       name: ev.name, description: ev.description,
       frequency: ev.frequency as Freq,
@@ -110,8 +111,20 @@ export default function ScheduleModule({ user, events, onEventsChange }: Props) 
       leadTimeHours: [...ev.leadTimeHours],
       messageTemplate: ev.messageTemplate,
       channels: [...ev.channels],
+      audienceType: ev.audienceType ?? 'all',
+      audienceValue: ev.audienceValue ?? '',
     });
     setEditTarget(ev); setOpen(true);
+  }
+
+  const tags = [...new Set(contacts.filter((c) => !c.archived).flatMap((c) => c.tags))].sort();
+
+  function audienceText(a: Audience) {
+    const n = audienceMembers(contacts, a).length;
+    const who = a.type === 'all' ? 'All active contacts'
+      : a.type === 'group' ? `Group: ${groups.find((g) => g.id === a.value)?.name ?? 'deleted group'}`
+      : `Tag: ${a.value}`;
+    return `${who} (${n})`;
   }
 
   function toggleLead(h: number) {
@@ -126,6 +139,10 @@ export default function ScheduleModule({ user, events, onEventsChange }: Props) 
     e.preventDefault();
     if (!form.leadTimeHours.length) { toast('error', 'Select at least one reminder time'); return; }
     if (!form.channels.length) { toast('error', 'Select at least one channel'); return; }
+    if (form.audienceType !== 'all' && !form.audienceValue) {
+      toast('error', `Choose which ${form.audienceType} gets this reminder`);
+      return;
+    }
     setSaving(true);
     await new Promise((r) => setTimeout(r, 300));
     const [datePart, timePart] = form.datetime.split('T');
@@ -140,8 +157,9 @@ export default function ScheduleModule({ user, events, onEventsChange }: Props) 
       messageTemplate: form.messageTemplate.trim(),
       channels: form.channels,
       active: editTarget ? editTarget.active : true,
-      nextTrigger: computeNextTrigger(form),
       createdBy: editTarget ? editTarget.createdBy : user.name,
+      audienceType: form.audienceType,
+      audienceValue: form.audienceType === 'all' ? undefined : form.audienceValue,
     };
     const updated = editTarget ? events.map((x) => x.id === editTarget.id ? ev : x) : [ev, ...events];
     store.saveEvents(updated);
@@ -181,6 +199,8 @@ export default function ScheduleModule({ user, events, onEventsChange }: Props) 
               <span style={{ color: 'var(--green)', fontWeight: 600 }}>{liveCount} active</span>
               {' · '}
               {pausedCount} paused
+              {' · '}
+              Active schedules send automatically (checked every 5 minutes). Times are Nigerian time.
             </p>
           </div>
           <button className="btn btn-primary" onClick={openAdd}>+ New schedule</button>
@@ -212,6 +232,7 @@ export default function ScheduleModule({ user, events, onEventsChange }: Props) 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {filtered.map((ev) => {
               const fc = FREQ_COLOR[ev.frequency as Freq];
+              const upcoming = ev.active ? nextSend(ev) : null;
               return (
                 <div key={ev.id} className="card" style={{ opacity: ev.active ? 1 : 0.65 }}>
                   <div style={{ padding: '18px 20px', display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
@@ -251,7 +272,13 @@ export default function ScheduleModule({ user, events, onEventsChange }: Props) 
                               ? `${new Date(ev.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} at ${ev.time}`
                               : ev.time,
                           },
-                          { label: 'Next send', value: fmtDate(ev.nextTrigger) },
+                          {
+                            label: 'Next send',
+                            value: !ev.active ? 'Paused'
+                              : upcoming ? `${fmtDate(upcoming.at)} (${fmtLeadLong(upcoming.leadHours)} before)`
+                              : 'Nothing upcoming',
+                          },
+                          { label: 'Who gets it', value: audienceText(audienceOf(ev)) },
                           { label: 'Channels', value: ev.channels.map((c) => c === 'whatsapp' ? 'WhatsApp' : 'SMS').join(' · ') },
                           { label: 'Reminders', value: ev.leadTimeHours.map(fmtLead).join(', ') + ' before' },
                         ].map((col) => (
@@ -378,6 +405,37 @@ export default function ScheduleModule({ user, events, onEventsChange }: Props) 
                       </button>
                     ))}
                   </div>
+                </div>
+
+                <div>
+                  <label className="label">Who gets it</label>
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <select className="input" value={form.audienceType} style={{ width: 'auto', minWidth: '170px' }}
+                      onChange={(e) => setForm((f) => ({ ...f, audienceType: e.target.value as FormState['audienceType'], audienceValue: '' }))}>
+                      <option value="all">All active contacts</option>
+                      <option value="group" disabled={!groups.length}>A group{groups.length ? '' : ' (create one on Contacts)'}</option>
+                      <option value="tag" disabled={!tags.length}>Everyone with a tag</option>
+                    </select>
+                    {form.audienceType === 'group' && (
+                      <select className="input" value={form.audienceValue} style={{ flex: 1, minWidth: '160px' }}
+                        onChange={(e) => setForm((f) => ({ ...f, audienceValue: e.target.value }))}>
+                        <option value="">Choose a group…</option>
+                        {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+                      </select>
+                    )}
+                    {form.audienceType === 'tag' && (
+                      <select className="input" value={form.audienceValue} style={{ flex: 1, minWidth: '160px' }}
+                        onChange={(e) => setForm((f) => ({ ...f, audienceValue: e.target.value }))}>
+                        <option value="">Choose a tag…</option>
+                        {tags.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    )}
+                  </div>
+                  <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '4px' }}>
+                    {form.audienceType === 'all' || form.audienceValue
+                      ? `${audienceText(audienceOf(form))} right now. Contacts added later are included automatically.`
+                      : 'Archived contacts are never sent reminders.'}
+                  </p>
                 </div>
 
                 <div>

@@ -3,6 +3,7 @@ import type {
   AuthUser,
   Contact,
   ContactField,
+  ContactGroup,
   MessageLog,
   ScheduledEvent,
   WelcomeTemplate,
@@ -42,7 +43,7 @@ function withCurrentBuiltIns(list: WelcomeTemplate[]): WelcomeTemplate[] {
 // An in-memory copy of the Supabase tables, loaded at sign-in. Every save is
 // handed to the cloud sync, which writes the changed rows.
 export type CollectionKey =
-  | 'fp_users' | 'fp_contacts' | 'fp_logs' | 'fp_events' | 'fp_attendance' | 'fp_welcome_templates' | 'fp_fields';
+  | 'fp_users' | 'fp_contacts' | 'fp_logs' | 'fp_events' | 'fp_attendance' | 'fp_welcome_templates' | 'fp_fields' | 'fp_groups';
 type CloudSave = (key: CollectionKey, prev: unknown[], next: unknown[]) => void;
 
 let cloud: { data: Record<CollectionKey, unknown[]>; onSave: CloudSave } | null = null;
@@ -80,6 +81,14 @@ export const store = {
 
   getEvents: (): ScheduledEvent[] => load<ScheduledEvent>('fp_events'),
   saveEvents: (e: ScheduledEvent[]) => save('fp_events', e),
+
+  getGroups: (): ContactGroup[] => load<ContactGroup>('fp_groups'),
+  saveGroups: (g: ContactGroup[]) => save('fp_groups', g),
+
+  /** Replace a collection with fresh data from Supabase, without writing it back. */
+  replaceFromCloud: (key: CollectionKey, data: unknown[]) => {
+    if (cloud) cloud.data[key] = data;
+  },
 
   getCurrentUser: (): AuthUser | null => currentUser,
   setCurrentUser: (u: AuthUser | null) => { currentUser = u; },

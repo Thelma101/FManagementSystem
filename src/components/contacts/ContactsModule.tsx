@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import type { Contact, ContactField, AuthUser, MessageLog } from '../../types';
+import type { Contact, ContactField, ContactGroup, AuthUser, MessageLog } from '../../types';
 import { store } from '../../lib/store';
 import { sendMessage } from '../../lib/api';
+import { newMessageId } from '../../lib/schedule';
 import { canDeleteRecords, canManageFields } from '../../lib/permissions';
 import { activeFields } from '../../lib/customFields';
 import { fmtDate, serviceLabel } from '../../lib/services';
@@ -11,12 +12,15 @@ import SmsCounter from '../ui/SmsCounter';
 import { toGsm } from '../../lib/sms';
 import ContactFormModal, { TAG_OPTIONS } from './ContactFormModal';
 import FieldsManager from './FieldsManager';
+import GroupsManager from './GroupsManager';
 import ImportContactsModal from './ImportContactsModal';
 
 interface Props {
   user: AuthUser;
   contacts: Contact[];
+  groups: ContactGroup[];
   onContactsChange: (c: Contact[]) => void;
+  onGroupsChange: (g: ContactGroup[]) => void;
   onLogAdded: (l: MessageLog) => void;
 }
 
@@ -37,15 +41,17 @@ function SendModal({ contact, user, onClose, onSent }: {
   async function send(channel: 'sms' | 'whatsapp') {
     if (!msg.trim()) return;
     setSending(channel);
-    const result = await sendMessage(contact.phone, channel, msg);
+    const id = newMessageId();
+    const result = await sendMessage(contact.phone, channel, msg, id);
     const log: MessageLog = {
-      id: 'ml' + Date.now(),
+      id,
       contactId: contact.id,
       contactName: contact.name,
       contactPhone: contact.phone,
       channel,
       content: msg,
       status: result.status,
+      statusDetail: result.error,
       sentAt: new Date().toISOString(),
       sentBy: user.name,
       kind: 'direct',
@@ -115,16 +121,18 @@ function SpiritualBadges({ c, fields }: { c: Contact; fields: ContactField[] }) 
 }
 
 // ── Main module ─────────────────────────────────────────────────────────────
-export default function ContactsModule({ user, contacts, onContactsChange, onLogAdded }: Props) {
+export default function ContactsModule({ user, contacts, groups, onContactsChange, onGroupsChange, onLogAdded }: Props) {
   const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [sendTarget, setSendTarget] = useState<Contact | null>(null);
   const [search, setSearch] = useState('');
   const [filterTag, setFilterTag] = useState('');
+  const [filterGroup, setFilterGroup] = useState('');
   const [filterSpiritual, setFilterSpiritual] = useState<SpiritualFilter>('');
   const [showArchived, setShowArchived] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
+  const [groupsOpen, setGroupsOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [allFields, setAllFields] = useState(() => store.getFields());
 
@@ -138,11 +146,13 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
     () => [...new Set([...TAG_OPTIONS, ...contacts.flatMap((c) => c.tags)])].sort(),
     [contacts],
   );
+  const groupName = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
 
   const filtered = pool.filter((c) => {
     const q = search.toLowerCase();
     if (q && ![c.name, c.phone, c.notes, c.metLocation ?? '', c.cellName ?? ''].some((v) => v.toLowerCase().includes(q))) return false;
     if (filterTag && !c.tags.includes(filterTag)) return false;
+    if (filterGroup === 'none' ? c.groupIds?.some((g) => groupName.has(g)) : filterGroup && !c.groupIds?.includes(filterGroup)) return false;
     switch (filterSpiritual) {
       case 'born-again': if (c.bornAgain !== true) return false; break;
       case 'not-born-again': if (c.bornAgain === true) return false; break;
@@ -160,7 +170,7 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
     return true;
   });
 
-  const hasFilters = !!(search || filterTag || filterSpiritual);
+  const hasFilters = !!(search || filterTag || filterGroup || filterSpiritual);
 
   /** Store is the source of truth so concurrent async updates don't clobber each other. */
   function updateContact(id: string, patch: Partial<Contact>) {
@@ -178,16 +188,18 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
   async function sendWelcome(current: Contact, opts: WelcomeOptions) {
     const channel = opts.channel;
     const text = fillWelcome(opts.text, current);
-    const result = await sendMessage(current.phone, channel, text);
+    const id = newMessageId();
+    const result = await sendMessage(current.phone, channel, text, id);
     const now = new Date().toISOString();
     addLog({
-      id: 'ml' + Date.now(),
+      id,
       contactId: current.id,
       contactName: current.name,
       contactPhone: current.phone,
       channel,
       content: text,
       status: result.status,
+      statusDetail: result.error,
       sentAt: now,
       sentBy: user.name,
       kind: 'welcome',
@@ -259,6 +271,7 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
             {canManageFields(user) && (
               <button className="btn btn-outline" onClick={() => setFieldsOpen(true)} title="Add questions such as Bible school">Fields</button>
             )}
+            <button className="btn btn-outline" onClick={() => setGroupsOpen(true)} title="Create groups such as Choir or Youth">Groups</button>
             <button className="btn btn-outline" onClick={() => setImportOpen(true)}>Import</button>
             <button className="btn btn-primary" onClick={() => setAddOpen(true)}>+ Add contact</button>
           </div>
@@ -293,11 +306,16 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
             <option value="">All tags</option>
             {tagOptions.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
+          <select value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)} className="input" style={{ width: 'auto', minWidth: '120px' }}>
+            <option value="">All groups</option>
+            {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+            {groups.length > 0 && <option value="none">Not in any group</option>}
+          </select>
           <button className={`chip ${showArchived ? 'chip-on' : ''}`} onClick={() => setShowArchived(!showArchived)}>
             {showArchived ? '← Active contacts' : 'Show archived'}
           </button>
           {hasFilters && (
-            <button className="btn btn-ghost btn-sm" onClick={() => { setSearch(''); setFilterTag(''); setFilterSpiritual(''); }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setSearch(''); setFilterTag(''); setFilterGroup(''); setFilterSpiritual(''); }}>
               Clear filters
             </button>
           )}
@@ -343,6 +361,13 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
                       <div style={{ minWidth: 0 }}>
                         <p style={{ fontWeight: 600, color: 'var(--text)', fontSize: '13.5px' }}>{c.name}</p>
                         {c.notes && <p style={{ fontSize: '12px', color: 'var(--text-3)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.notes}</p>}
+                        {c.groupIds?.some((g) => groupName.has(g)) && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '3px' }}>
+                            {c.groupIds.filter((g) => groupName.has(g)).map((g) => (
+                              <span key={g} className="badge badge-purple" style={{ fontSize: '10.5px' }}>{groupName.get(g)}</span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -386,6 +411,7 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
         <ContactFormModal
           mode="add"
           contacts={contacts}
+          groups={groups}
           user={user}
           onSave={handleAdd}
           onClose={() => setAddOpen(false)}
@@ -399,6 +425,7 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
           mode="edit"
           contact={editContact}
           contacts={contacts}
+          groups={groups}
           user={user}
           onSave={handleEdit}
           onClose={() => setEditId(null)}
@@ -418,6 +445,21 @@ export default function ContactsModule({ user, contacts, onContactsChange, onLog
             setAllFields(next);
             if (filterSpiritual.includes(':') && !activeFields(next).some((f) => filterSpiritual.endsWith(':' + f.id))) setFilterSpiritual('');
           }}
+        />
+      )}
+
+      {groupsOpen && (
+        <GroupsManager
+          user={user}
+          groups={groups}
+          shown={filtered}
+          filtered={hasFilters}
+          onClose={() => setGroupsOpen(false)}
+          onGroupsChange={(next) => {
+            onGroupsChange(next);
+            if (filterGroup && filterGroup !== 'none' && !next.some((g) => g.id === filterGroup)) setFilterGroup('');
+          }}
+          onContactsChange={onContactsChange}
         />
       )}
 

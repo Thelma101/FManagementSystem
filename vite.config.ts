@@ -6,6 +6,7 @@ import path from 'node:path'
 import siteConfiguration from './.figma/make/site.json'
 import { handleAdminUsers, handleRegister, type AdminEnv } from './server/adminUsers'
 import { handleSms, type SmsEnv } from './server/smsSend'
+import { handleTick } from './server/tick'
 
 
 // Vite config — https://vitejs.dev/config/
@@ -60,12 +61,20 @@ type ServerEnv = AdminEnv & SmsEnv
 function serverApi(env: ServerEnv): Plugin {
   const middleware: Connect.NextHandleFunction = (req, res, next) => {
     const route = req.url?.split('?')[0]
-    if (route !== '/api/admin/users' && route !== '/api/sms/send' && route !== '/api/auth/register') return next()
+    if (!['/api/admin/users', '/api/sms/send', '/api/auth/register', '/api/cron/tick'].includes(route ?? '')) return next()
 
     const send = (status: number, body: unknown) => {
       res.statusCode = status
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify(body))
+    }
+
+    if (route === '/api/cron/tick') {
+      const key = req.headers['x-cron-key']
+      handleTick(req.method, Array.isArray(key) ? key[0] : key, env)
+        .then((r) => send(r.status, r.body))
+        .catch((err) => send(500, { error: err instanceof Error ? err.message : 'Server error' }))
+      return
     }
 
     if (route === '/api/sms/send' && req.method === 'GET') {
