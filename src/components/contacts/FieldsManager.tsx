@@ -15,7 +15,14 @@ type Draft = { id?: string; label: string; type: FieldType; askDate: boolean; as
 const BLANK: Draft = { label: '', type: 'yesno', askDate: true, askPlace: false, options: '' };
 
 /** Built-in questions that already exist on every contact, so admins don't duplicate them. */
-const BUILT_IN = ['born again', 'saved', 'salvation', 'baptised', 'baptized', 'baptism', 'cell fellowship', 'wsf', 'name', 'phone', 'notes', 'tags'];
+const BUILT_IN = ['saved', 'salvation', 'baptised', 'baptized', 'baptism', 'wsf', 'name', 'phone', 'notes', 'tags', 'groups'];
+/** Blocked anywhere in a label, e.g. "Are you born again?" */
+const BUILT_IN_PHRASES = ['born again', 'cell fellowship'];
+
+function duplicatesBuiltIn(label: string) {
+  const words = label.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return BUILT_IN.includes(words) || BUILT_IN_PHRASES.some((p) => ` ${words} `.includes(` ${p} `));
+}
 
 export default function FieldsManager({ user, onClose, onChange }: Props) {
   const { toast } = useToast();
@@ -42,7 +49,7 @@ export default function FieldsManager({ user, onClose, onChange }: Props) {
     if (!draft) return;
     const label = draft.label.trim();
     if (!label) { setError('Give the field a name.'); return; }
-    if (BUILT_IN.includes(label.toLowerCase())) { setError(`"${label}" is already a standard question on every contact.`); return; }
+    if (duplicatesBuiltIn(label)) { setError(`"${label}" is already a standard question on every contact.`); return; }
     if (fields.some((f) => f.id !== draft.id && f.label.toLowerCase() === label.toLowerCase())) {
       setError('A field with this name already exists (check hidden fields too).');
       return;
