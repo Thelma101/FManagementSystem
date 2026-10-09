@@ -30,8 +30,8 @@ interface Props {
 
 const TEMPLATES = [
   { label: 'Harvest Field Invite', text: 'Dear {name}, you are warmly invited to our Harvest Field meeting this Sunday at 9:00 AM. Come and experience God\'s power! - Living Faith Church' },
-  { label: 'Midweek Service',      text: 'Dear {name}, our midweek Bible study holds this Wednesday at 5:30 PM. Come hungry for the Word! - Living Faith Church' },
-  { label: 'WSF Meeting',          text: 'Dear {name}, WSF holds this Sunday at 8:00 AM, a special session for new believers. You are welcome! - Living Faith Church' },
+  { label: 'Midweek Service',      text: 'Dear {name}, our midweek Bible study holds this Wednesday at 6:00 PM. Come hungry for the Word! - Living Faith Church' },
+  { label: 'WSF Meeting',          text: 'Dear {name}, WSF holds this Saturday at 5:00 PM, a special session for new believers. You are welcome! - Living Faith Church' },
   { label: 'Shiloh 2026',          text: 'Dear {name}, SHILOH 2026 holds December 7-11. Do not miss this divine encounter! - Living Faith Church' },
   { label: 'Follow-Up',            text: 'Dear {name}, we are thinking of you and trust you are well. We look forward to seeing you at our next service. God bless! - Living Faith Church' },
   { label: 'Youth Programme',      text: 'Dear {name}, our Youth Programme holds this Saturday! Bring a friend and celebrate God\'s grace. You are specially invited! - Living Faith Church' },
