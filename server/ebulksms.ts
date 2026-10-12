@@ -38,7 +38,7 @@ export function providerFrom(env: ProviderEnv): Provider | null {
   return {
     username,
     apiKey,
-    sender: (env.EBULKSMS_SENDER?.trim() || 'LivingFaith').slice(0, 11),
+    sender: (env.EBULKSMS_SENDER?.trim() || 'WCLekkiZone').slice(0, 11),
     dnd: env.EBULKSMS_DND?.trim() !== '0',
   };
 }

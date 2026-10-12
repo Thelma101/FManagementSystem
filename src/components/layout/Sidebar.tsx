@@ -67,7 +67,7 @@ export default function Sidebar({ active, user, onTabChange, onLogout, counts, o
           <LfcCrest />
           <div style={{ flex: 1 }}>
             <p style={{ fontFamily: 'Playfair Display, serif', fontSize: '0.875rem', color: '#fff', lineHeight: 1.25, fontWeight: 500 }}>
-              Living Faith
+              Living Faith (Lekki Zone)
             </p>
             <p style={{ fontSize: '9px', color: 'rgba(200,168,75,0.8)', textTransform: 'uppercase', letterSpacing: '0.18em', fontWeight: 700, marginTop: '1px' }}>
               Communications

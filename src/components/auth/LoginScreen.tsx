@@ -99,8 +99,8 @@ export default function LoginScreen({ onLogin }: Props) {
       }} className="login-mobile-bar">
         <LfcCrest size={32} />
         <div>
-          <p style={{ fontFamily: 'Playfair Display, serif', fontSize: '0.85rem', color: '#fff', fontWeight: 500 }}>Living Faith Church</p>
-          <p style={{ fontSize: '9px', color: 'rgba(200,168,75,0.85)', textTransform: 'uppercase', letterSpacing: '0.16em', fontWeight: 700 }}>Communications Portal</p>
+          <p style={{ fontFamily: 'Playfair Display, serif', fontSize: '0.85rem', color: '#fff', fontWeight: 500 }}>Living Faith (Lekki Zone)</p>
+          <p style={{ fontSize: '9px', color: 'rgba(200,168,75,0.85)', textTransform: 'uppercase', letterSpacing: '0.16em', fontWeight: 700 }}>Communications</p>
         </div>
       </div>
 
@@ -125,10 +125,10 @@ export default function LoginScreen({ onLogin }: Props) {
           <LfcCrest size={44} />
           <div>
             <p style={{ fontFamily: 'Playfair Display, serif', fontSize: '1.1rem', color: '#fff', lineHeight: 1.2, fontWeight: 500 }}>
-              Living Faith Church
+              Living Faith (Lekki Zone)
             </p>
             <p style={{ fontSize: '10px', color: 'rgba(200,168,75,0.85)', letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 600 }}>
-              Winners' Chapel
+              Communications
             </p>
           </div>
         </div>
