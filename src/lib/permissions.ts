@@ -7,9 +7,9 @@ export const ROLE_LABEL: Record<UserRole, string> = {
 };
 
 export const ROLE_DESCRIPTION: Record<UserRole, string> = {
-  superadmin: 'Full control, including adding or removing Admins and other Super Admins.',
-  admin: 'Manages contacts, schedules and reports. Can add or remove Authorized users.',
-  authorized: 'Adds contacts, sends messages and records attendance. Cannot manage users.',
+  superadmin: 'Full control, including adding or removing Admins.',
+  admin: 'Manages records and can add Authorized users.',
+  authorized: 'Adds contacts, sends messages and records attendance.',
 };
 
 const RANK: Record<UserRole, number> = { superadmin: 3, admin: 2, authorized: 1 };
@@ -44,4 +44,13 @@ export function canManageFields(user: AuthUser): boolean {
 
 export function canManageSchedules(user: AuthUser): boolean {
   return user.role === 'superadmin' || user.role === 'admin';
+}
+
+/** Unmasked phone book, full message history, and register downloads. */
+export function canSeeFullPhones(user: AuthUser): boolean {
+  return user.role === 'superadmin' || user.role === 'admin';
+}
+
+export function canExportReports(user: AuthUser): boolean {
+  return canSeeFullPhones(user);
 }

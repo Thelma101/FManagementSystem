@@ -1,5 +1,6 @@
 import type { Tab, AuthUser } from '../../types';
 import { ROLE_LABEL, canManageUsers } from '../../lib/permissions';
+import BrandMark from '../brand/BrandMark';
 
 interface Props {
   active: Tab;
@@ -17,7 +18,7 @@ export const NAV_ITEMS: { id: Tab; label: string; short: string; icon: string; b
   { id: 'contacts',   label: 'Contacts',   short: 'Contacts', badge: 'contacts', icon: 'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75' },
   { id: 'attendance', label: 'Attendance', short: 'Attend',   icon: 'M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11' },
   { id: 'messaging',  label: 'Messaging',  short: 'Messages', badge: 'messages', icon: 'M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z' },
-  { id: 'reports',    label: 'Reports',    short: 'Reports',  icon: 'M18 20V10M12 20V4M6 20v-6' },
+  { id: 'reports',    label: 'Reports',    short: 'Reports',  adminOnly: true, icon: 'M18 20V10M12 20V4M6 20v-6' },
   { id: 'schedule',   label: 'Schedule',   short: 'Schedule', badge: 'schedules', icon: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01' },
   { id: 'users',      label: 'Users',      short: 'Users',    adminOnly: true, icon: 'M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z' },
   { id: 'activity',   label: 'Activity',   short: 'Activity', adminOnly: true, icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
@@ -28,21 +29,6 @@ function Icon({ d, size = 16 }: { d: string; size?: number }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
       strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
       <path d={d} />
-    </svg>
-  );
-}
-
-function LfcCrest() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 72 72" fill="none" aria-hidden="true">
-      <path d="M36 4L8 16v20c0 16 12 28 28 32C52 64 64 52 64 36V16L36 4z" fill="rgba(255,255,255,0.08)" stroke="#C8A84B" strokeWidth="1.5"/>
-      <ellipse cx="36" cy="38" rx="13" ry="13" fill="none" stroke="#C8A84B" strokeWidth="1.2"/>
-      <ellipse cx="36" cy="38" rx="6" ry="13" fill="none" stroke="#C8A84B" strokeWidth="0.8"/>
-      <line x1="23" y1="38" x2="49" y2="38" stroke="#C8A84B" strokeWidth="0.8"/>
-      <line x1="24.5" y1="32" x2="47.5" y2="32" stroke="#C8A84B" strokeWidth="0.6"/>
-      <line x1="24.5" y1="44" x2="47.5" y2="44" stroke="#C8A84B" strokeWidth="0.6"/>
-      <path d="M36 8C34 12 30 14 32 18c1-3 3-4 4-2 1-2 3-1 4 2 2-4-2-6-4-10z" fill="#C8A84B"/>
-      <path d="M36 12c-1 2-3 3-2 5 1-1 1.5-1.5 2-0.5.5-1 1-0.5 2 0.5 1-2-1-3-2-5z" fill="#FFE08A"/>
     </svg>
   );
 }
@@ -59,17 +45,18 @@ export default function Sidebar({ active, user, onTabChange, onLogout, counts, o
       flexShrink: 0,
       display: 'flex',
       flexDirection: 'column',
-      background: 'var(--navy)',
+      background: '#111',
+      boxShadow: 'inset 0 3px 0 0 var(--brand-red), inset 0 5px 0 0 var(--gold)',
     }}>
       {/* Brand header */}
       <div style={{ padding: '20px 18px 16px', borderBottom: '1px solid var(--sidebar-border)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <LfcCrest />
+          <BrandMark size={34} />
           <div style={{ flex: 1 }}>
             <p style={{ fontFamily: 'Playfair Display, serif', fontSize: '0.875rem', color: '#fff', lineHeight: 1.25, fontWeight: 500 }}>
               Living Faith (Lekki Zone)
             </p>
-            <p style={{ fontSize: '9px', color: 'rgba(200,168,75,0.8)', textTransform: 'uppercase', letterSpacing: '0.18em', fontWeight: 700, marginTop: '1px' }}>
+            <p style={{ fontSize: '9px', color: '#F5C400', textTransform: 'uppercase', letterSpacing: '0.18em', fontWeight: 700, marginTop: '1px' }}>
               Communications
             </p>
           </div>
@@ -109,16 +96,16 @@ export default function Sidebar({ active, user, onTabChange, onLogout, counts, o
               onClick={() => onTabChange(item.id)}
               className={`nav-item ${isActive ? 'nav-active' : 'nav-inactive'}`}
             >
-              <span style={{ color: isActive ? '#C8A84B' : 'rgba(255,255,255,0.42)', flexShrink: 0, display: 'flex' }}>
+              <span style={{ color: isActive ? '#F5C400' : 'rgba(255,255,255,0.42)', flexShrink: 0, display: 'flex' }}>
                 <Icon d={item.icon} />
               </span>
               <span style={{ flex: 1 }}>{item.label}</span>
               {badge !== undefined && badge > 0 && (
                 <span style={{
                   fontSize: '11px', fontWeight: 700,
-                  padding: '1px 7px', borderRadius: '9999px',
-                  background: isActive ? 'rgba(200,168,75,0.3)' : 'rgba(255,255,255,0.1)',
-                  color: isActive ? '#F7EDD0' : 'rgba(255,255,255,0.5)',
+                  padding: '1px 6px', borderRadius: '3px',
+                  background: isActive ? '#C41E3A' : 'rgba(255,255,255,0.1)',
+                  color: isActive ? '#fff' : 'rgba(255,255,255,0.5)',
                   minWidth: '22px', textAlign: 'center', fontFamily: 'Inter, sans-serif',
                 }}>
                   {badge > 99 ? '99+' : badge}
@@ -137,7 +124,7 @@ export default function Sidebar({ active, user, onTabChange, onLogout, counts, o
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
           <div style={{
             width: '34px', height: '34px', borderRadius: '50%', flexShrink: 0,
-            background: 'linear-gradient(135deg, #C8A84B, #8C6F1E)',
+            background: '#C41E3A',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: '12px', fontWeight: 700, color: '#fff', fontFamily: 'Inter, sans-serif',
           }}>
@@ -147,7 +134,7 @@ export default function Sidebar({ active, user, onTabChange, onLogout, counts, o
             <p style={{ fontSize: '13px', fontWeight: 600, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {user.name}
             </p>
-            <p style={{ fontSize: '11px', color: 'rgba(200,168,75,0.75)' }}>
+            <p style={{ fontSize: '11px', color: '#F5C400' }}>
               {ROLE_LABEL[user.role]}
             </p>
           </div>

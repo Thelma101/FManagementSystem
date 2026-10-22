@@ -3,6 +3,8 @@ import type { ActivityEntry, ServiceType } from '../../types';
 import { loadActivity } from '../../lib/cloud';
 import { store } from '../../lib/store';
 import { serviceLabel } from '../../lib/services';
+import Select from '../ui/Select';
+import { formatDuration, loadUsage, type UsageRow } from '../../lib/metrics';
 
 const LIMIT = 500;
 
@@ -14,6 +16,8 @@ const ENTITIES: { id: string; label: string; noun: string }[] = [
   { id: 'contact_fields', label: 'Contact fields', noun: 'contact field' },
   { id: 'welcome_templates', label: 'Welcome templates', noun: 'welcome template' },
   { id: 'users', label: 'Users', noun: 'user' },
+  { id: 'sessions', label: 'Sign-in', noun: '' },
+  { id: 'reports', label: 'Reports', noun: 'report' },
 ];
 
 const PERIODS: { id: string; label: string; days?: number }[] = [
@@ -27,6 +31,7 @@ const VERB: Record<string, string> = {
   created: 'added',
   updated: 'changed',
   deleted: 'deleted',
+  erased: 'erased',
   archived: 'archived',
   restored: 'restored',
   paused: 'paused',
@@ -34,20 +39,28 @@ const VERB: Record<string, string> = {
   removed: 'removed',
   queued: 'queued reminders for',
   skipped: 'skipped reminders for',
+  signed_in: 'signed in',
+  signed_out: 'signed out',
+  downloaded: 'downloaded',
+  sent: 'sent',
+  imported: 'imported',
 };
 
 const ACTION_BADGE: Record<string, string> = {
   created: 'badge-green', registered: 'badge-green', restored: 'badge-green', resumed: 'badge-green', queued: 'badge-blue',
+  signed_in: 'badge-green', sent: 'badge-blue', downloaded: 'badge-navy', imported: 'badge-gold', signed_out: 'badge-gray',
   updated: 'badge-gold', paused: 'badge-amber', archived: 'badge-amber', skipped: 'badge-amber',
-  deleted: 'badge-red', removed: 'badge-red',
+  deleted: 'badge-red', removed: 'badge-red', erased: 'badge-red',
 };
 
 const FIELD_LABEL: Record<string, string> = {
-  met_location: 'Where met', met_date: 'Date met', born_again: 'Born again', salvation_date: 'Salvation date',
+  met_location: 'Where met', met_date: 'Date met', home_location: 'Home / area', closest_church: 'Closest church',
+  born_again: 'Born again', salvation_date: 'Salvation date',
   salvation_place: 'Salvation place', baptism_date: 'Baptism date', baptism_place: 'Baptism place',
   in_cell_fellowship: 'In a cell fellowship', cell_name: 'Cell', attendance_commitment: 'Will attend',
   committed_services: 'Committed to', committed_special_event: 'Special event', custom: 'Extra fields',
-  group_ids: 'Groups', day_of_week: 'Day', lead_time_hours: 'Reminder times', message_template: 'Message',
+  group_ids: 'Groups', assigned_to: 'Follow-up assigned to',
+  day_of_week: 'Day', lead_time_hours: 'Reminder times', message_template: 'Message',
   audience_type: 'Audience', audience_value: 'Audience group/tag', ask_date: 'Ask date', ask_place: 'Ask place',
   added_by: 'Added by', added_at: 'Added on', built_in: 'Built in', created_by: 'Created by', text: 'Wording',
 };
@@ -76,12 +89,19 @@ function fmtWhen(iso: string) {
 
 function sentence(e: ActivityEntry) {
   if (e.action === 'registered') return 'created their own account';
+  if (e.action === 'erased') return 'erased this record at the person\'s request';
+  if (e.action === 'signed_in') return 'signed in';
+  if (e.action === 'signed_out') return 'signed out';
+  if (e.action === 'sent') return 'sent a message';
+  if (e.action === 'imported') return 'imported contacts';
+  if (e.action === 'downloaded') return 'downloaded';
   const noun = ENTITIES.find((x) => x.id === e.entity)?.noun ?? e.entity;
   return `${VERB[e.action] ?? e.action} ${noun}`;
 }
 
 export default function ActivityModule() {
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
+  const [usage, setUsage] = useState<UsageRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [entity, setEntity] = useState('');
@@ -94,8 +114,11 @@ export default function ActivityModule() {
     const days = PERIODS.find((p) => p.id === period)?.days;
     setLoading(true);
     setError('');
-    loadActivity({ entity: entity || undefined, actor: actor || undefined, since: days ? new Date(Date.now() - days * 86400000).toISOString() : undefined }, LIMIT)
-      .then(setEntries)
+    Promise.all([
+      loadActivity({ entity: entity || undefined, actor: actor || undefined, since: days ? new Date(Date.now() - days * 86400000).toISOString() : undefined }, LIMIT),
+      loadUsage(),
+    ])
+      .then(([list, stats]) => { setEntries(list); setUsage(stats); })
       .catch((err: unknown) => setError(err instanceof Error ? err.message : 'Could not load the activity log'))
       .finally(() => setLoading(false));
   }
@@ -121,7 +144,7 @@ export default function ActivityModule() {
             <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: '4px' }}>Admin</p>
             <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: '1.8rem', fontWeight: 500, color: 'var(--text)' }}>Activity</h1>
             <p style={{ fontSize: '13px', color: 'var(--text-3)', marginTop: '2px' }}>
-              Who added, changed or deleted what. Entries can't be edited or removed.
+              Sign-ins, time in the app, messages, downloads, and every change. Entries can't be edited or removed.
             </p>
           </div>
           <button className="btn btn-outline" onClick={load} disabled={loading}>{loading ? 'Loading…' : 'Refresh'}</button>
@@ -129,21 +152,52 @@ export default function ActivityModule() {
         <div style={{ display: 'flex', gap: '8px', paddingBottom: '14px', flexWrap: 'wrap' }}>
           <input type="text" className="input" value={search} onChange={(e) => setSearch(e.target.value)}
             placeholder="Search names and details…" style={{ flex: 1, minWidth: '180px' }} />
-          <select className="input" value={entity} onChange={(e) => setEntity(e.target.value)} style={{ width: 'auto', minWidth: '150px' }}>
+          <Select className="input" value={entity} onChange={(e) => setEntity(e.target.value)} style={{ width: 'auto', minWidth: '150px' }}>
             <option value="">Everything</option>
             {ENTITIES.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
-          </select>
-          <select className="input" value={actor} onChange={(e) => setActor(e.target.value)} style={{ width: 'auto', minWidth: '150px' }}>
+          </Select>
+          <Select className="input" value={actor} onChange={(e) => setActor(e.target.value)} style={{ width: 'auto', minWidth: '150px' }}>
             <option value="">Everyone</option>
             {people.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
-          <select className="input" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ width: 'auto', minWidth: '130px' }}>
+          </Select>
+          <Select className="input" value={period} onChange={(e) => setPeriod(e.target.value)} style={{ width: 'auto', minWidth: '130px' }}>
             {PERIODS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-          </select>
+          </Select>
         </div>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto' }} className="table-scroll">
+        {usage.length > 0 && (
+          <div className="card" style={{ margin: '16px 24px 8px', overflow: 'hidden' }}>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{ paddingLeft: '20px' }}>User</th>
+                    <th>Logins</th>
+                    <th>Time in the app</th>
+                    <th style={{ paddingRight: '20px' }}>Last seen</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usage.map((u) => (
+                    <tr key={u.userId}>
+                      <td style={{ paddingLeft: '20px' }}>
+                        <p style={{ fontWeight: 600 }}>{u.name}</p>
+                        <p style={{ fontSize: '12px', color: 'var(--text-3)' }}>{u.email}</p>
+                      </td>
+                      <td>{u.logins}</td>
+                      <td>{formatDuration(u.seconds)}</td>
+                      <td style={{ paddingRight: '20px', fontSize: '12.5px', color: 'var(--text-3)' }}>
+                        {u.lastSeen ? fmtWhen(u.lastSeen) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
         {error ? (
           <div className="empty-state"><h3>Couldn't load activity</h3><p style={{ fontSize: '13px' }}>{error}</p></div>
         ) : !loading && shown.length === 0 ? (

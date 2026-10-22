@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import type { AuthUser, Contact, ContactGroup, MessageLog, ScheduledEvent, Tab } from './types';
 import { store } from './lib/store';
-import { canManageUsers } from './lib/permissions';
+import { canExportReports, canManageUsers } from './lib/permissions';
+import { visibleLogs } from './lib/privacy';
 import { isConfigured, openedFromRecoveryLink } from './lib/supabase';
 import { hasPendingWrites, onPasswordRecovery, onSyncError, refreshIfStale, restoreSession, signOut } from './lib/cloud';
+import { beginSession, endSession, logMetric } from './lib/metrics';
 import { ToastProvider, useToast } from './components/ui/Toast';
 import LoginScreen from './components/auth/LoginScreen';
 import SetPasswordScreen from './components/auth/SetPasswordScreen';
@@ -59,6 +61,8 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
 
   useEffect(() => {
     const offError = onSyncError((msg) => toast('error', 'Change not saved', msg));
+    let cancelled = false;
+    void beginSession().then(() => { if (cancelled) void endSession(); });
 
     // Pick up changes made by other team members when returning to the tab.
     const onVisible = () => {
@@ -71,7 +75,9 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('beforeunload', beforeUnload);
     return () => {
+      cancelled = true;
       offError();
+      void endSession();
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('beforeunload', beforeUnload);
     };
@@ -84,16 +90,17 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
     setSidebarOpen(false);
   }
 
+  const history = visibleLogs(user, logs);
   const counts = {
     contacts: contacts.length,
-    messages: logs.length,
+    messages: history.length,
     schedules: events.filter((e) => e.active).length,
   };
 
   const mobileNav = NAV_ITEMS.filter((n) => MOBILE_TABS.includes(n.id));
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)', position: 'relative' }}>
+    <div className="app-shell" style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)', position: 'relative' }}>
 
       {/* ── Mobile drawer backdrop ─────────────────────────────────────── */}
       {isMobile && sidebarOpen && (
@@ -119,21 +126,22 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
       {/* ── Main content ──────────────────────────────────────────────── */}
       <main className="app-main" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
         {tab === 'dashboard' && (
-          <Dashboard user={user} contacts={contacts} logs={logs} events={events} onNavigate={handleTabChange} />
+          <Dashboard user={user} contacts={contacts} logs={history} events={events} onNavigate={handleTabChange} />
         )}
         {tab === 'contacts' && (
           <ContactsModule
             user={user} contacts={contacts} groups={groups}
-            onContactsChange={setContacts} onGroupsChange={setGroups} onLogAdded={(log) => setLogs((p) => [log, ...p])}
+            onContactsChange={setContacts} onGroupsChange={setGroups}
+            onLogsChange={setLogs} onLogAdded={(log) => setLogs((p) => [log, ...p])}
           />
         )}
         {tab === 'messaging' && (
-          <MessagingModule user={user} contacts={contacts} groups={groups} logs={logs} onLogsChange={setLogs} onContactsChange={setContacts} />
+          <MessagingModule user={user} contacts={contacts} groups={groups} logs={history} onLogsChange={setLogs} onContactsChange={setContacts} />
         )}
         {tab === 'attendance' && (
           <AttendanceModule user={user} contacts={contacts} />
         )}
-        {tab === 'reports' && (
+        {tab === 'reports' && canExportReports(user) && (
           <ReportsModule contacts={contacts} />
         )}
         {tab === 'schedule' && (
@@ -249,6 +257,8 @@ function Portal() {
   }
 
   async function handleLogout() {
+    logMetric('signed_out', 'sessions');
+    await endSession();
     await signOut();
     setRecovery(false);
     setUser(null);

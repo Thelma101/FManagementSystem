@@ -2,31 +2,16 @@ import { useState } from 'react';
 import { register, requestPasswordReset, signIn } from '../../lib/cloud';
 import { MIN_PASSWORD_LENGTH, passwordError } from '../../lib/passwordRules';
 import type { AuthUser } from '../../types';
+import BrandMark from '../brand/BrandMark';
 
 interface Props { onLogin: (user: AuthUser) => void; }
-
-function LfcCrest({ size = 72 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Living Faith Church crest">
-      <path d="M36 4L8 16v20c0 16 12 28 28 32C52 64 64 52 64 36V16L36 4z" fill="#001845" stroke="#C8A84B" strokeWidth="2"/>
-      <path d="M36 10L14 20v16c0 12 9 22 22 26 13-4 22-14 22-26V20L36 10z" fill="none" stroke="rgba(200,168,75,0.35)" strokeWidth="1"/>
-      <ellipse cx="36" cy="38" rx="13" ry="13" fill="none" stroke="#C8A84B" strokeWidth="1.5"/>
-      <ellipse cx="36" cy="38" rx="6" ry="13" fill="none" stroke="#C8A84B" strokeWidth="1"/>
-      <line x1="23" y1="38" x2="49" y2="38" stroke="#C8A84B" strokeWidth="1"/>
-      <line x1="24.5" y1="32" x2="47.5" y2="32" stroke="#C8A84B" strokeWidth="0.8"/>
-      <line x1="24.5" y1="44" x2="47.5" y2="44" stroke="#C8A84B" strokeWidth="0.8"/>
-      <path d="M36 8C34 12 30 14 32 18c1-3 3-4 4-2 1-2 3-1 4 2 2-4-2-6-4-10z" fill="#C8A84B"/>
-      <path d="M36 12c-1 2-3 3-2 5 1-1 1.5-1.5 2-0.5.5-1 1-0.5 2 0.5 1-2-1-3-2-5z" fill="#FFE08A"/>
-    </svg>
-  );
-}
 
 type Step = 'credentials' | 'reset' | 'register';
 
 const HEADINGS: Record<Step, { badge: string; title: string; subtitle: string }> = {
-  credentials: { badge: 'Secure Portal Access', title: 'Welcome back', subtitle: 'Sign in to access the communications portal.' },
-  register: { badge: 'New Account', title: 'Create an account', subtitle: 'You start as an Authorized user. A Super Admin can give you more access.' },
-  reset: { badge: 'Password Reset', title: 'Forgot password?', subtitle: "Enter your email and we'll send you a link to set a new password." },
+  credentials: { badge: 'Staff sign-in', title: 'Welcome back', subtitle: 'Sign in to the Lekki Zone records.' },
+  register: { badge: 'New account', title: 'Create an account', subtitle: 'You start as an Authorized user. A Super Admin can give you more access.' },
+  reset: { badge: 'Password', title: 'Forgot password?', subtitle: "Enter your email and we will send a link to set a new password." },
 };
 
 export default function LoginScreen({ onLogin }: Props) {
@@ -94,13 +79,14 @@ export default function LoginScreen({ onLogin }: Props) {
 
       <div style={{
         position: 'fixed', top: 0, left: 0, right: 0, zIndex: 10,
-        background: 'var(--navy)', padding: '14px 20px',
+        background: '#111', padding: '14px 20px',
         display: 'flex', alignItems: 'center', gap: '10px',
+        boxShadow: 'inset 0 3px 0 0 #C41E3A, inset 0 5px 0 0 #F5C400',
       }} className="login-mobile-bar">
-        <LfcCrest size={32} />
+        <BrandMark size={32} label="Living Faith Church" />
         <div>
           <p style={{ fontFamily: 'Playfair Display, serif', fontSize: '0.85rem', color: '#fff', fontWeight: 500 }}>Living Faith (Lekki Zone)</p>
-          <p style={{ fontSize: '9px', color: 'rgba(200,168,75,0.85)', textTransform: 'uppercase', letterSpacing: '0.16em', fontWeight: 700 }}>Communications</p>
+          <p style={{ fontSize: '9px', color: '#F5C400', textTransform: 'uppercase', letterSpacing: '0.16em', fontWeight: 700 }}>Communications</p>
         </div>
       </div>
 
@@ -111,30 +97,26 @@ export default function LoginScreen({ onLogin }: Props) {
         flexDirection: 'column',
         justifyContent: 'space-between',
         padding: '52px 64px',
-        background: 'linear-gradient(150deg, #001845 0%, #002B6B 50%, #1A4080 100%)',
+        background: '#111111',
         position: 'relative',
         overflow: 'hidden',
         minWidth: 0,
+        boxShadow: 'inset 0 3px 0 0 #C41E3A, inset 0 5px 0 0 #F5C400',
       }}>
-        <div style={{
-          position: 'absolute', inset: 0, pointerEvents: 'none',
-          background: 'radial-gradient(ellipse at 70% 25%, rgba(200,168,75,0.09) 0%, transparent 55%), radial-gradient(ellipse at 15% 80%, rgba(200,168,75,0.06) 0%, transparent 50%)',
-        }} />
-
         <div className="fade-up" style={{ display: 'flex', alignItems: 'center', gap: '12px', position: 'relative' }}>
-          <LfcCrest size={44} />
+          <BrandMark size={44} label="Living Faith Church" />
           <div>
             <p style={{ fontFamily: 'Playfair Display, serif', fontSize: '1.1rem', color: '#fff', lineHeight: 1.2, fontWeight: 500 }}>
               Living Faith (Lekki Zone)
             </p>
-            <p style={{ fontSize: '10px', color: 'rgba(200,168,75,0.85)', letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 600 }}>
+            <p style={{ fontSize: '10px', color: '#F5C400', letterSpacing: '0.2em', textTransform: 'uppercase', fontWeight: 600 }}>
               Communications
             </p>
           </div>
         </div>
 
         <div className="fade-up d1" style={{ position: 'relative' }}>
-          <LfcCrest size={100} />
+          <BrandMark size={108} label="Living Faith Church" />
           <h1 style={{
             fontFamily: 'Playfair Display, serif',
             fontSize: 'clamp(1.9rem, 3.2vw, 2.9rem)',
@@ -144,36 +126,15 @@ export default function LoginScreen({ onLogin }: Props) {
             marginTop: '28px',
             marginBottom: '18px',
           }}>
-            Reaching souls,<br />
-            <em style={{ color: '#C8A84B', fontStyle: 'italic' }}>one message</em><br />
-            at a time.
+            Records for souls<br />
+            won and followed up.
           </h1>
-          <p style={{ color: 'rgba(255,255,255,0.58)', fontSize: '14.5px', lineHeight: 1.8, maxWidth: '380px' }}>
-            A secure portal for soul winning, follow-up care,<br />and automated church communications.
+          <p style={{ color: 'rgba(255,255,255,0.62)', fontSize: '14.5px', lineHeight: 1.8, maxWidth: '380px' }}>
+            Contacts, attendance, templates, and who sent each message.
           </p>
-
-          <div style={{ display: 'flex', gap: '10px', marginTop: '30px', flexWrap: 'wrap' }}>
-            {[
-              { label: 'SMS', d: 'M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72' },
-              { label: 'WhatsApp', d: 'M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z' },
-              { label: 'Scheduler', d: 'M12 8v4l3 3M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
-              { label: 'Contacts', d: 'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8z' },
-            ].map((f) => (
-              <span key={f.label} style={{
-                fontSize: '12px', fontWeight: 500,
-                padding: '5px 14px', borderRadius: '99px',
-                background: 'rgba(200,168,75,0.12)',
-                border: '1px solid rgba(200,168,75,0.3)',
-                color: '#F7EDD0',
-                display: 'inline-flex', alignItems: 'center', gap: '6px',
-              }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d={f.d} />
-                </svg>
-                {f.label}
-              </span>
-            ))}
-          </div>
+          <p style={{ color: '#F5C400', fontSize: '13px', marginTop: '22px', letterSpacing: '0.04em' }}>
+            SMS · WhatsApp · Follow-up · Register
+          </p>
         </div>
 
         <div className="fade-up d2" style={{ position: 'relative' }}>
@@ -192,26 +153,16 @@ export default function LoginScreen({ onLogin }: Props) {
         justifyContent: 'center',
         padding: '52px 44px',
         background: '#FFFFFF',
-        borderLeft: '1px solid #E2E8F0',
+        borderLeft: '1px solid #E0E0E0',
       }}>
         <div className="slide-right" key={step}>
           <div style={{ marginBottom: '32px' }}>
-            <div style={{
-              display: 'inline-flex', alignItems: 'center', gap: '7px',
-              padding: '4px 12px', borderRadius: '99px',
-              background: '#EEF3FB', border: '1px solid #BFCFE9',
-              marginBottom: '20px',
-            }}>
-              <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#002B6B', display: 'inline-block' }} />
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#002B6B', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-                {heading.badge}
-              </span>
-            </div>
+            <p className="kicker">{heading.badge}</p>
             <h2 style={{
               fontFamily: 'Playfair Display, serif',
               fontSize: '2rem',
               fontWeight: 500,
-              color: '#0A1628',
+              color: '#111111',
               marginBottom: '8px',
               letterSpacing: '-0.02em',
             }}>

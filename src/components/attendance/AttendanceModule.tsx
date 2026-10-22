@@ -3,6 +3,7 @@ import type { AttendanceRecord, AuthUser, Contact, ServiceType } from '../../typ
 import { store } from '../../lib/store';
 import { SERVICE_OPTIONS, SPECIAL_EVENTS, addWeeks, fmtWeekRange, weekStartOf } from '../../lib/services';
 import { useToast } from '../ui/Toast';
+import Select from '../ui/Select';
 
 interface Props {
   user: AuthUser;
@@ -42,7 +43,7 @@ export default function AttendanceModule({ user, contacts }: Props) {
   const activeContacts = contacts.filter((c) => !c.archived);
   const visible = activeContacts.filter((c) => {
     const q = search.toLowerCase();
-    if (q && !c.name.toLowerCase().includes(q) && !c.phone.includes(q)) return false;
+    if (q && !c.name.toLowerCase().includes(q)) return false;
     if (onlyCommitted && c.attendanceCommitment !== 'yes') return false;
     return true;
   });
@@ -146,12 +147,12 @@ export default function AttendanceModule({ user, contacts }: Props) {
 
         <div style={{ display: 'flex', gap: '8px', paddingBottom: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
           <input className="input" style={{ flex: 1, minWidth: '180px' }} placeholder="Search contacts…" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <select className="input" style={{ width: 'auto', minWidth: '240px' }} value={specialEvent} aria-label="Special event this week"
+          <Select className="input" style={{ width: 'auto', minWidth: '240px' }} value={specialEvent} aria-label="Special event this week"
             onChange={(e) => { if (e.target.value === '__other') setOtherOpen(true); else changeSpecialEvent(e.target.value); }}>
             <option value="">No special event this week</option>
             {eventOptions.map((ev) => <option key={ev} value={ev}>{ev}</option>)}
             <option value="__other">Other event…</option>
-          </select>
+          </Select>
           {otherOpen && (
             <form style={{ display: 'flex', gap: '6px' }}
               onSubmit={(e) => {

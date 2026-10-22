@@ -3,13 +3,24 @@ import type { Contact, ContactField, ContactGroup, AuthUser, MessageLog } from '
 import { store } from '../../lib/store';
 import { sendMessage } from '../../lib/api';
 import { newMessageId } from '../../lib/schedule';
-import { canDeleteRecords, canManageFields } from '../../lib/permissions';
+import { canDeleteRecords, canManageFields, canSeeFullPhones } from '../../lib/permissions';
+import {
+  canMessageContact,
+  canSeeContactPhone,
+  displayPhone,
+  erasedContactPatch,
+  isErasedContact,
+  scrubMessageLog,
+} from '../../lib/privacy';
 import { activeFields } from '../../lib/customFields';
 import { fmtDate, serviceLabel } from '../../lib/services';
 import { fillWelcome, type WelcomeOptions } from '../../lib/welcome';
+import { MESSAGE_TEMPLATES, fillName } from '../../lib/messageTemplates';
+import { senderFields } from '../../lib/sender';
 import { useToast } from '../ui/Toast';
+import Select from '../ui/Select';
+import { logMetric } from '../../lib/metrics';
 import SmsCounter from '../ui/SmsCounter';
-import { toGsm } from '../../lib/sms';
 import ContactFormModal, { TAG_OPTIONS } from './ContactFormModal';
 import FieldsManager from './FieldsManager';
 import GroupsManager from './GroupsManager';
@@ -21,6 +32,7 @@ interface Props {
   groups: ContactGroup[];
   onContactsChange: (c: Contact[]) => void;
   onGroupsChange: (g: ContactGroup[]) => void;
+  onLogsChange: (l: MessageLog[]) => void;
   onLogAdded: (l: MessageLog) => void;
 }
 
@@ -35,8 +47,10 @@ function SendModal({ contact, user, onClose, onSent }: {
   onSent: (log: MessageLog) => void;
 }) {
   const { toast } = useToast();
-  const [msg, setMsg] = useState('');
+  const [templateId, setTemplateId] = useState('');
   const [sending, setSending] = useState<'sms' | 'whatsapp' | null>(null);
+  const template = MESSAGE_TEMPLATES.find((t) => t.id === templateId);
+  const msg = template ? fillName(template.text, contact.name) : '';
 
   async function send(channel: 'sms' | 'whatsapp') {
     if (!msg.trim()) return;
@@ -53,7 +67,7 @@ function SendModal({ contact, user, onClose, onSent }: {
       status: result.status,
       statusDetail: result.error,
       sentAt: new Date().toISOString(),
-      sentBy: user.name,
+      ...senderFields(user),
       kind: 'direct',
     };
     setSending(null);
@@ -77,17 +91,21 @@ function SendModal({ contact, user, onClose, onSent }: {
         </div>
         <div className="modal-body">
           <div>
-            <label className="label">Message</label>
-            <textarea
-              className="input"
-              rows={5}
-              value={msg}
-              onChange={(e) => setMsg(e.target.value)}
-              placeholder={`Dear ${contact.name.split(' ')[0]}, you are warmly invited…`}
-              autoFocus
-            />
-            <SmsCounter text={msg} onFix={() => setMsg(toGsm(msg))} />
+            <label className="label">Template</label>
+            <Select className="input" value={templateId} onChange={(e) => setTemplateId(e.target.value)} autoFocus>
+              <option value="">Choose a template…</option>
+              {MESSAGE_TEMPLATES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+            </Select>
           </div>
+          {msg ? (
+            <>
+              <p style={{ fontSize: '12.5px', color: 'var(--text-3)' }}>The wording is fixed. {'{name}'} is filled from this record.</p>
+              <div style={{ background: '#dcf8c6', borderRadius: '12px 12px 4px 12px', padding: '10px 13px', fontSize: '13px', lineHeight: 1.6, color: '#1a1a1a' }}>
+                {msg}
+              </div>
+              <SmsCounter text={msg} />
+            </>
+          ) : null}
         </div>
         <div className="modal-footer" style={{ gap: '8px' }}>
           <button className="btn btn-outline" onClick={onClose}>Cancel</button>
@@ -107,7 +125,7 @@ function SpiritualBadges({ c, fields }: { c: Contact; fields: ContactField[] }) 
   const items: { label: string; cls: string }[] = [];
   if (c.bornAgain === true) items.push({ label: 'Born again', cls: 'badge-green' });
   if (c.bornAgain === false) items.push({ label: 'Not born again', cls: 'badge-gray' });
-  if (c.baptised) items.push({ label: 'Baptised', cls: 'badge-blue' });
+  if (c.bornAgain === true && c.baptised) items.push({ label: 'Baptised', cls: 'badge-blue' });
   if (c.inCellFellowship) items.push({ label: 'WSF', cls: 'badge-gold' });
   for (const f of fields) {
     if (f.type === 'yesno' && c.custom?.[f.id]?.value === true) items.push({ label: f.label, cls: 'badge-navy' });
@@ -121,7 +139,7 @@ function SpiritualBadges({ c, fields }: { c: Contact; fields: ContactField[] }) 
 }
 
 // ── Main module ─────────────────────────────────────────────────────────────
-export default function ContactsModule({ user, contacts, groups, onContactsChange, onGroupsChange, onLogAdded }: Props) {
+export default function ContactsModule({ user, contacts, groups, onContactsChange, onGroupsChange, onLogsChange, onLogAdded }: Props) {
   const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -130,6 +148,7 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
   const [filterTag, setFilterTag] = useState('');
   const [filterGroup, setFilterGroup] = useState('');
   const [filterSpiritual, setFilterSpiritual] = useState<SpiritualFilter>('');
+  const [filterAssigned, setFilterAssigned] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [fieldsOpen, setFieldsOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
@@ -142,17 +161,23 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
   const active = contacts.filter((c) => !c.archived);
   const archived = contacts.filter((c) => c.archived);
   const pool = showArchived ? archived : active;
+  const scoped = canSeeFullPhones(user)
+    ? pool
+    : pool.filter((c) => c.assignedTo === user.id || c.addedBy === user.id);
   const tagOptions = useMemo(
     () => [...new Set([...TAG_OPTIONS, ...contacts.flatMap((c) => c.tags)])].sort(),
     [contacts],
   );
   const groupName = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
+  const staff = useMemo(() => store.getUsers(), []);
+  const staffName = useMemo(() => new Map(staff.map((u) => [u.id, u.name])), [staff]);
 
-  const filtered = pool.filter((c) => {
+  const filtered = scoped.filter((c) => {
     const q = search.toLowerCase();
-    if (q && ![c.name, c.phone, c.notes, c.metLocation ?? '', c.cellName ?? ''].some((v) => v.toLowerCase().includes(q))) return false;
+    if (q && ![c.name, displayPhone(user, c), c.notes, c.metLocation ?? '', c.homeLocation ?? '', c.closestChurch ?? '', c.cellName ?? ''].some((v) => v.toLowerCase().includes(q))) return false;
     if (filterTag && !c.tags.includes(filterTag)) return false;
     if (filterGroup === 'none' ? c.groupIds?.some((g) => groupName.has(g)) : filterGroup && !c.groupIds?.includes(filterGroup)) return false;
+    if (filterAssigned === 'none' ? c.assignedTo : filterAssigned && c.assignedTo !== filterAssigned) return false;
     switch (filterSpiritual) {
       case 'born-again': if (c.bornAgain !== true) return false; break;
       case 'not-born-again': if (c.bornAgain === true) return false; break;
@@ -170,7 +195,7 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
     return true;
   });
 
-  const hasFilters = !!(search || filterTag || filterGroup || filterSpiritual);
+  const hasFilters = !!(search || filterTag || filterGroup || filterSpiritual || filterAssigned);
 
   /** Store is the source of truth so concurrent async updates don't clobber each other. */
   function updateContact(id: string, patch: Partial<Contact>) {
@@ -201,9 +226,10 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
       status: result.status,
       statusDetail: result.error,
       sentAt: now,
-      sentBy: user.name,
+      ...senderFields(user),
       kind: 'welcome',
     });
+    logMetric('sent', 'message_logs', channel === 'sms' ? 'Welcome SMS' : 'Welcome WhatsApp', current.name, id);
     if (result.success) {
       updateContact(current.id, { welcomeSentAt: now, lastContacted: now });
       toast('success', `Welcome sent via ${channel === 'sms' ? 'SMS' : 'WhatsApp'}`, current.name);
@@ -229,6 +255,10 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
 
   function openExisting(c: Contact) {
     setAddOpen(false);
+    if (!canSeeContactPhone(user, c)) {
+      toast('info', 'Already on record', 'Ask an Admin if you need this contact opened.');
+      return;
+    }
     if (c.archived && !showArchived) setShowArchived(true);
     setEditId(c.id);
   }
@@ -241,7 +271,7 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
 
   function deleteContact(id: string) {
     const c = contacts.find((x) => x.id === id);
-    if (!confirm(`Permanently delete ${c?.name}? This cannot be undone.`)) return;
+    if (!confirm(`Permanently delete ${c?.name}? Use this for a duplicate or test record. If the person asked to be forgotten, use Erase instead.`)) return;
     const list = store.getContacts().filter((x) => x.id !== id);
     store.saveContacts(list);
     store.saveAttendance(store.getAttendance().filter((a) => a.contactId !== id));
@@ -249,8 +279,24 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
     toast('info', 'Contact deleted', c?.name);
   }
 
+  function eraseContact(id: string) {
+    const c = contacts.find((x) => x.id === id);
+    if (!c || isErasedContact(c)) return;
+    if (!confirm(
+      `Erase ${c.name} because they asked to be forgotten?\n\nName, phone, notes, locations and message wording will be permanently blanked. Anonymous attendance counts stay. This cannot be undone.`,
+    )) return;
+    const list = store.getContacts().map((x) => (x.id === id ? erasedContactPatch(x) : x));
+    store.saveContacts(list);
+    onContactsChange(list);
+    const nextLogs = store.getLogs().map((log) => (log.contactId === id ? scrubMessageLog(log) : log));
+    store.saveLogs(nextLogs);
+    onLogsChange(nextLogs);
+    toast('info', 'Record erased', 'Personal details were removed at their request.');
+  }
+
   function handleSent(log: MessageLog) {
     addLog(log);
+    logMetric('sent', 'message_logs', log.channel === 'whatsapp' ? 'WhatsApp' : 'SMS', log.contactName, log.id);
     if (log.status === 'delivered' || log.status === 'sent') updateContact(log.contactId, { lastContacted: log.sentAt });
   }
 
@@ -264,7 +310,9 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
             <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.09em', marginBottom: '4px' }}>Soul Winning</p>
             <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: '1.8rem', fontWeight: 500, color: 'var(--text)' }}>Contacts</h1>
             <p style={{ fontSize: '13px', color: 'var(--text-3)', marginTop: '2px' }}>
-              {active.length} active · {archived.length} archived
+              {canSeeFullPhones(user)
+                ? `${active.length} active · ${archived.length} archived`
+                : `${scoped.length} on your list · people you added or follow up`}
             </p>
           </div>
           <div className="action-row">
@@ -287,7 +335,7 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
               </svg>
             </span>
           </div>
-          <select value={filterSpiritual} onChange={(e) => setFilterSpiritual(e.target.value as SpiritualFilter)} className="input" style={{ width: 'auto', minWidth: '150px' }}>
+          <Select value={filterSpiritual} onChange={(e) => setFilterSpiritual(e.target.value as SpiritualFilter)} className="input" style={{ width: 'auto', minWidth: '150px' }}>
             <option value="">All spiritual status</option>
             <option value="born-again">Born again</option>
             <option value="not-born-again">Not born again / unknown</option>
@@ -301,21 +349,29 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
                 <option value={`no:${f.id}`}>{f.label}: no / unknown</option>
               </optgroup>
             ))}
-          </select>
-          <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)} className="input" style={{ width: 'auto', minWidth: '120px' }}>
+          </Select>
+          <Select value={filterTag} onChange={(e) => setFilterTag(e.target.value)} className="input" style={{ width: 'auto', minWidth: '120px' }}>
             <option value="">All tags</option>
             {tagOptions.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-          <select value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)} className="input" style={{ width: 'auto', minWidth: '120px' }}>
+          </Select>
+          <Select value={filterGroup} onChange={(e) => setFilterGroup(e.target.value)} className="input" style={{ width: 'auto', minWidth: '120px' }}>
             <option value="">All groups</option>
             {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
             {groups.length > 0 && <option value="none">Not in any group</option>}
-          </select>
+          </Select>
+          <Select value={filterAssigned} onChange={(e) => setFilterAssigned(e.target.value)} className="input" style={{ width: 'auto', minWidth: '150px' }}>
+            <option value="">All follow-up</option>
+            <option value={user.id}>Assigned to me</option>
+            {staff.filter((u) => u.id !== user.id).map((u) => (
+              <option key={u.id} value={u.id}>Assigned to {u.name}</option>
+            ))}
+            <option value="none">Not assigned</option>
+          </Select>
           <button className={`chip ${showArchived ? 'chip-on' : ''}`} onClick={() => setShowArchived(!showArchived)}>
             {showArchived ? '← Active contacts' : 'Show archived'}
           </button>
           {hasFilters && (
-            <button className="btn btn-ghost btn-sm" onClick={() => { setSearch(''); setFilterTag(''); setFilterGroup(''); setFilterSpiritual(''); }}>
+            <button className="btn btn-ghost btn-sm" onClick={() => { setSearch(''); setFilterTag(''); setFilterGroup(''); setFilterSpiritual(''); setFilterAssigned(''); }}>
               Clear filters
             </button>
           )}
@@ -330,8 +386,8 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
                 <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" />
               </svg>
             </div>
-            <h3>{contacts.length === 0 ? 'No contacts yet' : 'No contacts match your filters'}</h3>
-            <p style={{ fontSize: '13px' }}>{contacts.length === 0 ? 'Add your first soul from the harvest field.' : 'Try clearing your filters.'}</p>
+            <h3>{scoped.length === 0 ? (canSeeFullPhones(user) ? 'No contacts yet' : 'Nobody on your list yet') : 'No contacts match your filters'}</h3>
+            <p style={{ fontSize: '13px' }}>{scoped.length === 0 ? 'Add your first soul from the harvest field.' : 'Try clearing your filters.'}</p>
           </div>
         ) : (
           <table className="table">
@@ -339,7 +395,7 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
               <tr>
                 <th style={{ paddingLeft: '24px' }}>Contact</th>
                 <th>Phone</th>
-                <th>Met</th>
+                <th>Met / lives</th>
                 <th>Spiritual status</th>
                 <th>Committed to</th>
                 <th style={{ textAlign: 'right', paddingRight: '24px' }}>Actions</th>
@@ -352,7 +408,7 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <div style={{
                         width: '34px', height: '34px', borderRadius: '50%', flexShrink: 0,
-                        background: 'var(--navy-light)', border: '1px solid #BFCFE9',
+                        background: 'var(--navy-light)', border: '1px solid #D0D0D0',
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: '11px', fontWeight: 700, color: 'var(--navy)', fontFamily: 'Inter, sans-serif',
                       }}>
@@ -361,6 +417,11 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
                       <div style={{ minWidth: 0 }}>
                         <p style={{ fontWeight: 600, color: 'var(--text)', fontSize: '13.5px' }}>{c.name}</p>
                         {c.notes && <p style={{ fontSize: '12px', color: 'var(--text-3)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.notes}</p>}
+                        {c.assignedTo && (
+                          <p style={{ fontSize: '11.5px', color: 'var(--gold-dark)', marginTop: '2px' }}>
+                            Follow-up: {staffName.get(c.assignedTo) ?? 'staff'}
+                          </p>
+                        )}
                         {c.groupIds?.some((g) => groupName.has(g)) && (
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '3px' }}>
                             {c.groupIds.filter((g) => groupName.has(g)).map((g) => (
@@ -372,10 +433,18 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
                     </div>
                   </td>
                   <td>
-                    <p className="mono" style={{ fontSize: '13px', color: 'var(--text-2)' }}>{c.phone}</p>
+                    <p className="mono" style={{ fontSize: '13px', color: 'var(--text-2)' }}>{displayPhone(user, c)}</p>
                   </td>
                   <td style={{ fontSize: '12.5px' }}>
-                    <p style={{ color: 'var(--text-2)', maxWidth: '170px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.metLocation || '—'}</p>
+                    <p style={{ color: 'var(--text-2)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.metLocation}>
+                      Met: {c.metLocation || '—'}
+                    </p>
+                    <p style={{ color: 'var(--text-2)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.homeLocation}>
+                      Lives: {c.homeLocation || '—'}
+                    </p>
+                    <p style={{ color: 'var(--text-3)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.closestChurch}>
+                      Church: {c.closestChurch || '—'}
+                    </p>
                     <p style={{ color: 'var(--text-3)' }}>{c.metDate ? fmtDate(c.metDate) : fmtDate(c.addedAt)}</p>
                   </td>
                   <td><SpiritualBadges c={c} fields={yesNoFields} /></td>
@@ -388,13 +457,26 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
                   </td>
                   <td style={{ textAlign: 'right', paddingRight: '24px' }}>
                     <div className="action-row" style={{ justifyContent: 'flex-end' }}>
-                      {!c.archived && (
+                      {!c.archived && canMessageContact(user, c) && (
                         <button className="btn btn-outline btn-sm" onClick={() => setSendTarget(c)}>Send</button>
                       )}
-                      <button className="btn btn-ghost btn-sm" onClick={() => setEditId(c.id)}>Edit</button>
-                      <button className="btn btn-ghost btn-sm" onClick={() => archiveContact(c.id)} style={{ color: 'var(--text-3)' }}>
-                        {c.archived ? 'Restore' : 'Archive'}
-                      </button>
+                      {canSeeContactPhone(user, c) && !isErasedContact(c) && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => setEditId(c.id)}>Edit</button>
+                      )}
+                      {!isErasedContact(c) && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => archiveContact(c.id)} style={{ color: 'var(--text-3)' }}>
+                          {c.archived ? 'Restore' : 'Archive'}
+                        </button>
+                      )}
+                      {canDelete && !isErasedContact(c) && (
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => eraseContact(c.id)}
+                          title="Blank personal details because the person asked to be forgotten"
+                        >
+                          Erase
+                        </button>
+                      )}
                       {canDelete && (
                         <button className="btn btn-danger btn-sm" onClick={() => deleteContact(c.id)}>Delete</button>
                       )}

@@ -8,6 +8,8 @@ import {
   type RowResult, type Sheet, type Target,
 } from '../../lib/contactImport';
 import { useToast } from '../ui/Toast';
+import Select from '../ui/Select';
+import { logMetric } from '../../lib/metrics';
 
 interface Props {
   user: AuthUser;
@@ -16,7 +18,7 @@ interface Props {
 }
 
 type Step = 'upload' | 'map' | 'review' | 'done';
-const GROUPS: Target['group'][] = ['Contact', 'Where we met', 'Spiritual status', 'More details'];
+const GROUPS: Target['group'][] = ['Contact', 'Where we met', 'Where they live', 'Spiritual status', 'More details'];
 const PREVIEW_ROWS = 200;
 
 export default function ImportContactsModal({ user, onClose, onImported }: Props) {
@@ -81,6 +83,7 @@ export default function ImportContactsModal({ user, onClose, onImported }: Props
     store.saveContacts(all);
     setImported(fresh.length);
     onImported(all, fresh.length);
+    logMetric('imported', 'contacts', `${fresh.length} contacts`);
     toast('success', `${fresh.length} contacts imported`);
     setStep('done');
   }
@@ -151,7 +154,7 @@ export default function ImportContactsModal({ user, onClose, onImported }: Props
                         <td style={{ paddingLeft: '14px', fontWeight: 600 }}>{h}</td>
                         <td style={{ color: 'var(--text-3)', fontSize: '12.5px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sample(col) || '—'}</td>
                         <td>
-                          <select className="input" value={mapping[col] ?? ''} onChange={(e) => setColumn(col, e.target.value)} style={{ minWidth: '200px' }}>
+                          <Select className="input" value={mapping[col] ?? ''} onChange={(e) => setColumn(col, e.target.value)} style={{ minWidth: '200px' }}>
                             <option value="">Don't import</option>
                             {GROUPS.map((g) => {
                               const opts = targets.filter((t) => t.group === g);
@@ -161,7 +164,7 @@ export default function ImportContactsModal({ user, onClose, onImported }: Props
                                 </optgroup>
                               ) : null;
                             })}
-                          </select>
+                          </Select>
                         </td>
                       </tr>
                     ))}
@@ -171,9 +174,9 @@ export default function ImportContactsModal({ user, onClose, onImported }: Props
               <div className="grid-2">
                 <div>
                   <label className="label">Country for numbers without +code</label>
-                  <select className="input" value={country} onChange={(e) => setCountry(e.target.value as CountryCode)}>
+                  <Select className="input" value={country} onChange={(e) => setCountry(e.target.value as CountryCode)}>
                     {countries.map((c) => <option key={c.iso} value={c.iso}>{c.label}</option>)}
-                  </select>
+                  </Select>
                 </div>
                 <div>
                   <label className="label">Add this tag to everyone imported</label>

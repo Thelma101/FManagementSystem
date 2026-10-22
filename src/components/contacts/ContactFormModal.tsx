@@ -5,10 +5,10 @@ import { store } from '../../lib/store';
 import { parsePhone } from '../../lib/phone';
 import { COMMITMENT_LABEL, SERVICE_OPTIONS, SPECIAL_EVENTS, fmtDate, todayIso } from '../../lib/services';
 import { PLACEHOLDERS, fillWelcome, type WelcomeChannel, type WelcomeOptions } from '../../lib/welcome';
+import { canSeeContactPhone } from '../../lib/privacy';
 import PhoneInput from '../ui/PhoneInput';
-import { useToast } from '../ui/Toast';
+import Select from '../ui/Select';
 import SmsCounter from '../ui/SmsCounter';
-import { toGsm } from '../../lib/sms';
 
 export const TAG_OPTIONS = ['harvest-field', 'soul-winning', 'follow-up', 'youth', 'wsf', 'new-convert'];
 
@@ -33,6 +33,9 @@ type FormState = {
   notes: string;
   metLocation: string;
   metDate: string;
+  homeLocation: string;
+  closestChurch: string;
+  assignedTo: string;
   bornAgain?: boolean;
   salvationDate: string;
   salvationPlace: string;
@@ -56,6 +59,9 @@ function initialForm(c?: Contact): FormState {
     notes: c?.notes ?? '',
     metLocation: c?.metLocation ?? '',
     metDate: c?.metDate ?? (c ? '' : todayIso()),
+    homeLocation: c?.homeLocation ?? '',
+    closestChurch: c?.closestChurch ?? '',
+    assignedTo: c?.assignedTo ?? '',
     bornAgain: c?.bornAgain,
     salvationDate: c?.salvationDate ?? '',
     salvationPlace: c?.salvationPlace ?? '',
@@ -85,15 +91,18 @@ interface Props {
 export default function ContactFormModal({
   mode, contact, contacts, groups, user, onSave, onClose, onOpenExisting,
 }: Props) {
-  const { toast } = useToast();
-  const [form, setForm] = useState<FormState>(() => initialForm(contact));
+  const [form, setForm] = useState<FormState>(() => {
+    const f = initialForm(contact);
+    if (!contact) f.assignedTo = user.id;
+    return f;
+  });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Welcome message (add mode only)
-  const [templates, setTemplates] = useState(() => store.getWelcomeTemplates());
+  // Welcome message (add mode only) — pick a saved template; wording is not edited here.
+  const templates = useMemo(() => store.getWelcomeTemplates(), []);
   const [sendWelcome, setSendWelcome] = useState(true);
-  const [templateId, setTemplateId] = useState(templates[0]?.id ?? 'custom');
+  const [templateId, setTemplateId] = useState(templates[0]?.id ?? '');
   const [welcomeText, setWelcomeText] = useState(templates[0]?.text ?? '');
   const [welcomeChannel, setWelcomeChannel] = useState<WelcomeChannel>('sms');
 
@@ -127,27 +136,6 @@ export default function ContactFormModal({
     if (t) setWelcomeText(t.text);
   }
 
-  function saveAsTemplate() {
-    const label = prompt('Name this welcome message template:');
-    if (!label?.trim()) return;
-    const t = { id: 'w' + Date.now(), label: label.trim(), text: welcomeText.trim() };
-    const next = [...templates, t];
-    store.saveWelcomeTemplates(next);
-    setTemplates(next);
-    setTemplateId(t.id);
-    toast('success', 'Template saved', t.label);
-  }
-
-  function deleteTemplate() {
-    const t = templates.find((x) => x.id === templateId);
-    if (!t || t.builtIn) return;
-    if (!confirm(`Delete the "${t.label}" template?`)) return;
-    const next = templates.filter((x) => x.id !== t.id);
-    store.saveWelcomeTemplates(next);
-    setTemplates(next);
-    pickTemplate(next[0]?.id ?? 'custom');
-  }
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
@@ -165,7 +153,7 @@ export default function ContactFormModal({
       return;
     }
     if (mode === 'add' && sendWelcome && !welcomeText.trim()) {
-      setError('Write a welcome message or untick "Send a welcome message".');
+      setError('Choose a welcome template or untick "Send a welcome message".');
       return;
     }
 
@@ -190,12 +178,15 @@ export default function ContactFormModal({
       notes: form.notes.trim(),
       metLocation: form.metLocation.trim() || undefined,
       metDate: form.metDate || undefined,
+      homeLocation: form.homeLocation.trim() || undefined,
+      closestChurch: form.closestChurch.trim() || undefined,
+      assignedTo: form.assignedTo || undefined,
       bornAgain: form.bornAgain,
       salvationDate: form.bornAgain ? form.salvationDate || undefined : undefined,
       salvationPlace: form.bornAgain ? form.salvationPlace.trim() || undefined : undefined,
-      baptised: form.baptised,
-      baptismDate: form.baptised ? form.baptismDate || undefined : undefined,
-      baptismPlace: form.baptised ? form.baptismPlace.trim() || undefined : undefined,
+      baptised: form.bornAgain ? form.baptised : undefined,
+      baptismDate: form.bornAgain && form.baptised ? form.baptismDate || undefined : undefined,
+      baptismPlace: form.bornAgain && form.baptised ? form.baptismPlace.trim() || undefined : undefined,
       custom: cleanCustom(allFields, form.custom),
       inCellFellowship: form.inCellFellowship,
       cellName: form.inCellFellowship ? form.cellName.trim() || undefined : undefined,
@@ -262,9 +253,13 @@ export default function ContactFormModal({
                       {dupAddedBy ? ` by ${dupAddedBy}` : ''}
                       {duplicate.archived ? ' (currently archived)' : ''}.
                     </p>
-                    <button type="button" className="btn btn-outline btn-xs" style={{ marginTop: '8px' }} onClick={() => onOpenExisting(duplicate)}>
-                      Open existing contact
-                    </button>
+                    {canSeeContactPhone(user, duplicate) ? (
+                      <button type="button" className="btn btn-outline btn-xs" style={{ marginTop: '8px' }} onClick={() => onOpenExisting(duplicate)}>
+                        Open existing contact
+                      </button>
+                    ) : (
+                      <p style={{ marginTop: '8px', fontSize: '12.5px' }}>Ask an Admin if you need this record opened.</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -286,13 +281,50 @@ export default function ContactFormModal({
               </div>
             </div>
 
+            <div className="form-section">
+              <p className="form-section-title">Where they live</p>
+              <p style={{ fontSize: '12.5px', color: 'var(--text-3)', marginBottom: '10px' }}>
+                Type the area in their own words. Mapping can be added later.
+              </p>
+              <div className="grid-2">
+                <div>
+                  <label className="label">Home / area</label>
+                  <input className="input" value={form.homeLocation} onChange={(e) => set('homeLocation', e.target.value)}
+                    placeholder="e.g. Ajah, Abraham Adesanya estate" />
+                </div>
+                <div>
+                  <label className="label">Closest church</label>
+                  <input className="input" value={form.closestChurch} onChange={(e) => set('closestChurch', e.target.value)}
+                    placeholder="e.g. Winners Chapel Lekki Zone" />
+                </div>
+              </div>
+            </div>
+
+            <div className="form-section">
+              <p className="form-section-title">Follow-up</p>
+              <label className="label">Assigned to</label>
+              <Select className="input" value={form.assignedTo} onChange={(e) => set('assignedTo', e.target.value)}>
+                <option value="">Not assigned</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{u.name}{u.id === user.id ? ' (you)' : ''}</option>
+                ))}
+              </Select>
+              <p style={{ fontSize: '12.5px', color: 'var(--text-3)', marginTop: '6px' }}>
+                This worker will send the approved templates to this person. New records default to you.
+              </p>
+            </div>
+
             {/* ── Spiritual status ──────────────────────────────────────── */}
             <div className="form-section">
               <p className="form-section-title">Spiritual status</p>
 
               <div className="field-row">
-                <span>Born again?</span>
-                <YesNo value={form.bornAgain} onChange={(v) => set('bornAgain', v)} />
+                <span>Given their life to Christ (born again)?</span>
+                <YesNo value={form.bornAgain} onChange={(v) => setForm((f) => ({
+                  ...f,
+                  bornAgain: v,
+                  ...(v === true ? {} : { baptised: undefined, baptismDate: '', baptismPlace: '' }),
+                }))} />
               </div>
               {form.bornAgain && (
                 <div className="grid-2">
@@ -308,22 +340,26 @@ export default function ContactFormModal({
                 </div>
               )}
 
-              <div className="field-row">
-                <span>Baptised?</span>
-                <YesNo value={form.baptised} onChange={(v) => set('baptised', v)} />
-              </div>
-              {form.baptised && (
-                <div className="grid-2">
-                  <div>
-                    <label className="label">Date of baptism</label>
-                    <input type="date" className="input" value={form.baptismDate} max={todayIso()} onChange={(e) => set('baptismDate', e.target.value)} />
+              {form.bornAgain === true && (
+                <>
+                  <div className="field-row">
+                    <span>Baptised?</span>
+                    <YesNo value={form.baptised} onChange={(v) => set('baptised', v)} />
                   </div>
-                  <div>
-                    <label className="label">Where they were baptised</label>
-                    <input className="input" value={form.baptismPlace} onChange={(e) => set('baptismPlace', e.target.value)}
-                      placeholder="e.g. Canaan Land, Ota" />
-                  </div>
-                </div>
+                  {form.baptised && (
+                    <div className="grid-2">
+                      <div>
+                        <label className="label">Date of baptism</label>
+                        <input type="date" className="input" value={form.baptismDate} max={todayIso()} onChange={(e) => set('baptismDate', e.target.value)} />
+                      </div>
+                      <div>
+                        <label className="label">Where they were baptised</label>
+                        <input className="input" value={form.baptismPlace} onChange={(e) => set('baptismPlace', e.target.value)}
+                          placeholder="e.g. Canaan Land, Ota" />
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               <div className="field-row">
@@ -369,10 +405,10 @@ export default function ContactFormModal({
                   {form.committedServices.includes('special-event') && (
                     <div>
                       <label className="label">Special event</label>
-                      <select className="input" value={form.committedSpecialEvent} onChange={(e) => set('committedSpecialEvent', e.target.value)}>
+                      <Select className="input" value={form.committedSpecialEvent} onChange={(e) => set('committedSpecialEvent', e.target.value)}>
                         <option value="">Select event…</option>
                         {SPECIAL_EVENTS.map((ev) => <option key={ev} value={ev}>{ev}</option>)}
-                      </select>
+                      </Select>
                     </div>
                   )}
                 </>
@@ -415,10 +451,10 @@ export default function ContactFormModal({
                     <div key={f.id}>
                       <label className="label">{f.label}</label>
                       {f.type === 'choice' ? (
-                        <select className="input" value={typeof v.value === 'string' ? v.value : ''} onChange={(e) => setCustom(f.id, { value: e.target.value })}>
+                        <Select className="input" value={typeof v.value === 'string' ? v.value : ''} onChange={(e) => setCustom(f.id, { value: e.target.value })}>
                           <option value="">Not recorded</option>
                           {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
-                        </select>
+                        </Select>
                       ) : (
                         <input type={f.type === 'date' ? 'date' : 'text'} className="input" value={typeof v.value === 'string' ? v.value : ''}
                           onChange={(e) => setCustom(f.id, { value: e.target.value })} />
@@ -474,47 +510,28 @@ export default function ContactFormModal({
                   <>
                     <div className="grid-2">
                       <div>
-                        <label className="label">Message template</label>
-                        <select className="input" value={templateId} onChange={(e) => pickTemplate(e.target.value)}>
+                        <label className="label">Welcome template</label>
+                        <Select className="input" value={templateId} onChange={(e) => pickTemplate(e.target.value)}>
                           {templates.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-                          <option value="custom">Write a custom message…</option>
-                        </select>
+                        </Select>
                       </div>
                       <div>
                         <label className="label">Send via</label>
-                        <select className="input" value={welcomeChannel} onChange={(e) => setWelcomeChannel(e.target.value as WelcomeChannel)}>
+                        <Select className="input" value={welcomeChannel} onChange={(e) => setWelcomeChannel(e.target.value as WelcomeChannel)}>
                           <option value="sms">SMS</option>
                           <option value="whatsapp">WhatsApp</option>
-                        </select>
+                        </Select>
                       </div>
                     </div>
-                    <div>
-                      <label className="label">Message (edit freely for this person)</label>
-                      <textarea className="input" rows={4} value={welcomeText}
-                        onChange={(e) => { setWelcomeText(e.target.value); if (templateId !== 'custom' && templates.find((t) => t.id === templateId)?.text !== e.target.value) setTemplateId('custom'); }}
-                        placeholder="Dear {name}, it was a joy meeting you at {location}…" />
-                      <SmsCounter text={welcomePreview} onFix={() => setWelcomeText(toGsm(welcomeText))} />
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginTop: '5px', flexWrap: 'wrap' }}>
-                        <p style={{ fontSize: '11.5px', color: 'var(--text-3)' }}>
-                          Placeholders: {PLACEHOLDERS.map((p) => (
-                            <code key={p.key} title={p.hint} className="mono" style={{ fontSize: '11px', marginRight: '6px' }}>{p.key}</code>
-                          ))}
-                        </p>
-                        <div style={{ display: 'flex', gap: '6px' }}>
-                          {templates.find((t) => t.id === templateId && !t.builtIn) && (
-                            <button type="button" className="btn btn-ghost btn-xs" onClick={deleteTemplate}>Delete template</button>
-                          )}
-                          <button type="button" className="btn btn-outline btn-xs" disabled={!welcomeText.trim()} onClick={saveAsTemplate}>
-                            Save as template
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    {welcomeText.trim() && (
+                    <p style={{ fontSize: '12.5px', color: 'var(--text-3)' }}>
+                      The wording is fixed. {PLACEHOLDERS.map((p) => p.key).join(', ')} fill in from this record.
+                    </p>
+                    {welcomePreview && (
                       <div style={{ background: '#dcf8c6', borderRadius: '12px 12px 4px 12px', padding: '10px 13px', fontSize: '13px', lineHeight: 1.6, color: '#1a1a1a' }}>
                         {welcomePreview}
                       </div>
                     )}
+                    <SmsCounter text={welcomePreview} />
                   </>
                 )}
               </div>

@@ -47,7 +47,7 @@ function StatCard({ label, value, sub, accent, iconPath }: {
   label: string; value: string | number; sub?: string; accent: string; iconPath: string;
 }) {
   return (
-    <div className="stat-card fade-up" style={{ borderTop: `3px solid ${accent}` }}>
+    <div className="stat-card fade-up" style={{ borderTop: '3px solid var(--brand-red)' }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '14px' }}>
         <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{label}</p>
         <StatIcon path={iconPath} color={accent} />
@@ -159,7 +159,7 @@ export default function Dashboard({ user, contacts, logs, events, onNavigate }: 
                   <div style={{
                     width: '36px', height: '36px', borderRadius: '50%', flexShrink: 0,
                     background: 'var(--navy-light)',
-                    border: '1px solid #BFCFE9',
+                    border: '1px solid #D0D0D0',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     fontSize: '11px', fontWeight: 700, color: 'var(--navy)',
                     fontFamily: 'Inter, sans-serif',
@@ -273,7 +273,7 @@ export default function Dashboard({ user, contacts, logs, events, onNavigate }: 
                     transition: 'background 0.14s, border-color 0.14s',
                     fontFamily: 'Inter, sans-serif',
                   }}
-                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--navy-xlight)'; e.currentTarget.style.borderColor = '#BFCFE9'; }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--navy-xlight)'; e.currentTarget.style.borderColor = '#D0D0D0'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--surface-2)'; e.currentTarget.style.borderColor = 'var(--border)'; }}
                 >
                   <div style={{

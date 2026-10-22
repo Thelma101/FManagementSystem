@@ -31,6 +31,12 @@ export interface Contact {
   // Harvest field
   metLocation?: string;
   metDate?: string; // YYYY-MM-DD
+  /** Where they actually live (text until mapping is added). */
+  homeLocation?: string;
+  /** Closest church to where they live (text until mapping is added). */
+  closestChurch?: string;
+  /** Staff user who follows this soul up (sends templates to them). */
+  assignedTo?: string;
 
   // Spiritual status
   bornAgain?: boolean;
@@ -104,6 +110,7 @@ export interface MessageLog {
   statusAt?: string;
   sentAt: string;
   sentBy: string;
+  sentByEmail?: string;
   kind?: 'welcome' | 'broadcast' | 'direct' | 'scheduled';
 }
 

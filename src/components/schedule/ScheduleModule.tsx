@@ -5,6 +5,7 @@ import { canManageSchedules } from '../../lib/permissions';
 import { audienceMembers, audienceOf, nextSend, type Audience } from '../../lib/schedule';
 import { useToast } from '../ui/Toast';
 import SmsCounter from '../ui/SmsCounter';
+import Select from '../ui/Select';
 import { toGsm } from '../../lib/sms';
 
 interface Props {
@@ -410,25 +411,25 @@ export default function ScheduleModule({ user, events, contacts, groups, onEvent
                 <div>
                   <label className="label">Who gets it</label>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <select className="input" value={form.audienceType} style={{ width: 'auto', minWidth: '170px' }}
+                    <Select className="input" value={form.audienceType} style={{ width: 'auto', minWidth: '170px' }}
                       onChange={(e) => setForm((f) => ({ ...f, audienceType: e.target.value as FormState['audienceType'], audienceValue: '' }))}>
                       <option value="all">All active contacts</option>
                       <option value="group" disabled={!groups.length}>A group{groups.length ? '' : ' (create one on Contacts)'}</option>
                       <option value="tag" disabled={!tags.length}>Everyone with a tag</option>
-                    </select>
+                    </Select>
                     {form.audienceType === 'group' && (
-                      <select className="input" value={form.audienceValue} style={{ flex: 1, minWidth: '160px' }}
+                      <Select className="input" value={form.audienceValue} style={{ flex: 1, minWidth: '160px' }}
                         onChange={(e) => setForm((f) => ({ ...f, audienceValue: e.target.value }))}>
                         <option value="">Choose a group…</option>
                         {groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-                      </select>
+                      </Select>
                     )}
                     {form.audienceType === 'tag' && (
-                      <select className="input" value={form.audienceValue} style={{ flex: 1, minWidth: '160px' }}
+                      <Select className="input" value={form.audienceValue} style={{ flex: 1, minWidth: '160px' }}
                         onChange={(e) => setForm((f) => ({ ...f, audienceValue: e.target.value }))}>
                         <option value="">Choose a tag…</option>
                         {tags.map((t) => <option key={t} value={t}>{t}</option>)}
-                      </select>
+                      </Select>
                     )}
                   </div>
                   <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '4px' }}>

@@ -15,19 +15,19 @@ const BUILT_IN_WELCOME: WelcomeTemplate[] = [
     id: 'w1',
     label: 'Harvest field welcome',
     builtIn: true,
-    text: 'Dear {name}, it was a joy meeting you at {location}. God loves you and so do we! Come and worship with us at Living Faith Church.',
+    text: 'Dear {name}, it was a joy meeting you at {location}. God loves you and so do we! Come and worship with us at Living Faith Church (Lekki Zone).',
   },
   {
     id: 'w2',
     label: 'New convert welcome',
     builtIn: true,
-    text: "Dear {name}, welcome to God's family! Join us on Sunday at 7AM and at our WSF cell fellowship near you. God bless you! - Living Faith Church",
+    text: "Dear {name}, welcome to God's family! Join us on Sunday at 7AM and at our WSF cell fellowship near you. God bless you! - Living Faith Church (Lekki Zone)",
   },
   {
     id: 'w3',
     label: 'Service invitation',
     builtIn: true,
-    text: 'Dear {name}, thanks for your time at {location}. You are invited to our {service} at Living Faith Church. Come expecting a touch from God!',
+    text: 'Dear {name}, thanks for your time at {location}. You are invited to our {service} at Living Faith Church (Lekki Zone). Come expecting a touch from God!',
   },
 ];
 

@@ -4,10 +4,15 @@ import { store } from '../../lib/store';
 import { sendMessage } from '../../lib/api';
 import { refreshLogs } from '../../lib/cloud';
 import { newMessageId } from '../../lib/schedule';
+import { MESSAGE_TEMPLATES, fillName } from '../../lib/messageTemplates';
+import { senderCaption, senderFields } from '../../lib/sender';
 import { useToast } from '../ui/Toast';
 import SmsCounter from '../ui/SmsCounter';
-import { toGsm } from '../../lib/sms';
+import Select from '../ui/Select';
 import { getSmsGatewayStatus, type SmsGatewayStatus } from '../../lib/smsGateway';
+import { canMessageContact, displayPhone, maskPhone } from '../../lib/privacy';
+import { logMetric } from '../../lib/metrics';
+import { canSeeFullPhones } from '../../lib/permissions';
 
 const STATUS_LABEL: Record<MessageStatus, string> = { delivered: 'Delivered', sent: 'Sent', failed: 'Failed', pending: 'Unconfirmed' };
 const STATUS_BADGE: Record<MessageStatus, string> = { delivered: 'badge-green', sent: 'badge-blue', failed: 'badge-red', pending: 'badge-amber' };
@@ -28,21 +33,12 @@ interface Props {
   onContactsChange: (c: Contact[]) => void;
 }
 
-const TEMPLATES = [
-  { label: 'Harvest Field Invite', text: 'Dear {name}, you are warmly invited to our Harvest Field meeting this Sunday at 9:00 AM. Come and experience God\'s power! - Living Faith Church' },
-  { label: 'Midweek Service',      text: 'Dear {name}, our midweek Bible study holds this Wednesday at 6:00 PM. Come hungry for the Word! - Living Faith Church' },
-  { label: 'WSF Meeting',          text: 'Dear {name}, WSF holds this Saturday at 5:00 PM, a special session for new believers. You are welcome! - Living Faith Church' },
-  { label: 'Shiloh 2026',          text: 'Dear {name}, SHILOH 2026 holds December 7-11. Do not miss this divine encounter! - Living Faith Church' },
-  { label: 'Follow-Up',            text: 'Dear {name}, we are thinking of you and trust you are well. We look forward to seeing you at our next service. God bless! - Living Faith Church' },
-  { label: 'Youth Programme',      text: 'Dear {name}, our Youth Programme holds this Saturday! Bring a friend and celebrate God\'s grace. You are specially invited! - Living Faith Church' },
-];
 
 export default function MessagingModule({ user, contacts, groups, logs, onLogsChange, onContactsChange }: Props) {
   const { toast } = useToast();
   const [tab, setTab] = useState<'compose' | 'history'>('compose');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [msgText, setMsgText] = useState('');
-  const [activeTemplate, setActiveTemplate] = useState<number | null>(null);
+  const [templateId, setTemplateId] = useState('');
   const [sending, setSending] = useState<'sms' | 'whatsapp' | null>(null);
   const [progress, setProgress] = useState(0);
   const [contactSearch, setContactSearch] = useState('');
@@ -70,21 +66,25 @@ export default function MessagingModule({ user, contacts, groups, logs, onLogsCh
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
-  const activeContacts = contacts.filter((c) => !c.archived);
+  const activeContacts = contacts.filter((c) => canMessageContact(user, c));
   const tags = useMemo(() => [...new Set(activeContacts.flatMap((c) => c.tags))].sort(), [activeContacts]);
 
   function addAudience(value: string) {
     const [kind, key] = [value.slice(0, value.indexOf(':')), value.slice(value.indexOf(':') + 1)];
-    const members = activeContacts.filter((c) => (kind === 'group' ? c.groupIds?.includes(key) : c.tags.includes(key)));
+    const members = activeContacts.filter((c) => {
+      if (kind === 'assigned') return c.assignedTo === key;
+      if (kind === 'group') return c.groupIds?.includes(key);
+      return c.tags.includes(key);
+    });
     if (!members.length) { toast('info', 'Nobody to add', 'No active contacts are in it yet.'); return; }
     setSelectedIds((s) => new Set([...s, ...members.map((c) => c.id)]));
-    const name = kind === 'group' ? groups.find((g) => g.id === key)?.name : key;
+    const name = kind === 'assigned' ? 'your follow-up list' : kind === 'group' ? groups.find((g) => g.id === key)?.name : key;
     toast('success', `Added ${members.length} from ${name}`);
   }
 
   const filteredContacts = activeContacts.filter((c) => {
     const q = contactSearch.toLowerCase();
-    return !q || c.name.toLowerCase().includes(q) || c.phone.includes(q);
+    return !q || c.name.toLowerCase().includes(q) || displayPhone(user, c).toLowerCase().includes(q);
   });
 
   const filteredLogs = useMemo(() => {
@@ -97,13 +97,14 @@ export default function MessagingModule({ user, contacts, groups, logs, onLogsCh
     }).sort((a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime());
   }, [logs, logSearch, logFilterCh, logFilterStatus]);
 
+  const template = MESSAGE_TEMPLATES.find((t) => t.id === templateId);
+  const msgText = template?.text ?? '';
   const previewText = useMemo(() => {
     if (!msgText) return '';
     const sample = contacts.find((c) => selectedIds.has(c.id)) ?? activeContacts[0];
-    return sample ? msgText.replace(/{name}/g, sample.name.split(' ')[0]) : msgText;
+    return sample ? fillName(msgText, sample.name) : msgText;
   }, [msgText, selectedIds, contacts, activeContacts]);
 
-  function applyTemplate(i: number) { setActiveTemplate(i); setMsgText(TEMPLATES[i].text); }
   function toggleContact(id: string) {
     setSelectedIds((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
@@ -122,10 +123,10 @@ export default function MessagingModule({ user, contacts, groups, logs, onLogsCh
     const now = new Date().toISOString();
     for (let i = 0; i < eligible.length; i++) {
       const c = eligible[i];
-      const text = msgText.replace(/{name}/g, c.name.split(' ')[0]);
+      const text = fillName(msgText, c.name);
       const id = newMessageId();
       const r = await sendMessage(c.phone, channel, text, id);
-      newLogs.push({ id, contactId: c.id, contactName: c.name, contactPhone: c.phone, channel, content: text, status: r.status, statusDetail: r.error, sentAt: now, sentBy: user.name, kind: 'broadcast' });
+      newLogs.push({ id, contactId: c.id, contactName: c.name, contactPhone: c.phone, channel, content: text, status: r.status, statusDetail: r.error, sentAt: now, ...senderFields(user), kind: 'broadcast' });
       if (r.success) { success++; reached.add(c.id); }
       setProgress(Math.round(((i + 1) / eligible.length) * 100));
       if (r.fatal) { stopped = r.error; break; }
@@ -143,6 +144,7 @@ export default function MessagingModule({ user, contacts, groups, logs, onLogsCh
       return;
     }
     setSelectedIds(new Set());
+    logMetric('sent', 'message_logs', `${success} of ${eligible.length} via ${channel === 'sms' ? 'SMS' : 'WhatsApp'}`, template?.label);
     toast(success ? 'success' : 'error', `Sent via ${channel === 'sms' ? 'SMS' : 'WhatsApp'}`, `${success} of ${eligible.length} sent`);
     setTab('history');
   }
@@ -157,7 +159,7 @@ export default function MessagingModule({ user, contacts, groups, logs, onLogsCh
             <h1 style={{ fontFamily: 'Playfair Display, serif', fontSize: '1.8rem', fontWeight: 500, color: 'var(--text)' }}>Messaging</h1>
           </div>
           <div style={{ display: 'flex', gap: '24px', paddingTop: '4px' }}>
-            {[{ label: 'Sent', val: logs.length }, { label: 'Successful', val: logs.filter(l => l.status === 'delivered' || l.status === 'sent').length }].map((s) => (
+            {[{ label: canSeeFullPhones(user) ? 'Sent' : 'You sent', val: logs.length }, { label: 'Successful', val: logs.filter(l => l.status === 'delivered' || l.status === 'sent').length }].map((s) => (
               <div key={s.label} style={{ textAlign: 'right' }}>
                 <p style={{ fontFamily: 'Playfair Display, serif', fontSize: '1.4rem', color: 'var(--gold)' }}>{s.val}</p>
                 <p style={{ fontSize: '11px', color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{s.label}</p>
@@ -197,31 +199,29 @@ export default function MessagingModule({ user, contacts, groups, logs, onLogsCh
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxWidth: '560px' }}>
                 {/* Templates */}
                 <div>
-                  <p className="label" style={{ marginBottom: '8px' }}>Quick Templates</p>
+                  <p className="label" style={{ marginBottom: '8px' }}>Template</p>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                    {TEMPLATES.map((t, i) => (
-                      <button key={i} type="button" onClick={() => applyTemplate(i)}
-                        className={`chip ${activeTemplate === i ? 'chip-on' : ''}`}>
+                    {MESSAGE_TEMPLATES.map((t) => (
+                      <button key={t.id} type="button" onClick={() => setTemplateId(t.id)}
+                        className={`chip ${templateId === t.id ? 'chip-on' : ''}`}>
                         {t.label}
                       </button>
                     ))}
                   </div>
+                  <p style={{ fontSize: '12.5px', color: 'var(--text-3)', marginTop: '8px' }}>
+                    Pick a template. The wording is fixed so every send is on record as the same approved message.
+                  </p>
                 </div>
 
-                {/* Message */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                    <label className="label" style={{ margin: 0 }}>Message <span style={{ fontWeight: 400, color: 'var(--text-3)' }}>— use {'{name}'} for personalisation</span></label>
+                {msgText && (
+                  <div>
+                    <label className="label">Message</label>
+                    <div style={{ border: '1px solid var(--border)', borderRadius: '8px', padding: '12px 14px', background: 'var(--surface-2)', fontSize: '13.5px', lineHeight: 1.6, color: 'var(--text-2)', whiteSpace: 'pre-wrap' }}>
+                      {msgText}
+                    </div>
+                    <SmsCounter text={previewText || msgText} hasPlaceholders={msgText.includes('{name}')} />
                   </div>
-                  <textarea
-                    rows={6}
-                    className="input"
-                    value={msgText}
-                    onChange={(e) => { setMsgText(e.target.value); setActiveTemplate(null); }}
-                    placeholder="Dear {name}, you are warmly invited to…"
-                  />
-                  <SmsCounter text={previewText || msgText} onFix={() => { setMsgText(toGsm(msgText)); setActiveTemplate(null); }} hasPlaceholders={msgText.includes('{name}')} />
-                </div>
+                )}
 
                 {/* Recipients */}
                 <div>
@@ -234,31 +234,37 @@ export default function MessagingModule({ user, contacts, groups, logs, onLogsCh
                       <button onClick={clearAll} style={{ color: 'var(--text-3)', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'Inter, sans-serif' }}>Clear</button>
                     </div>
                   </div>
+                  {!canSeeFullPhones(user) && (
+                    <p style={{ fontSize: '12px', color: 'var(--text-3)', marginBottom: '6px' }}>
+                      You can message people you added or who are on your follow-up list.
+                    </p>
+                  )}
                   <div style={{ display: 'flex', gap: '6px', marginBottom: '6px', flexWrap: 'wrap' }}>
                     <input type="text" className="input" value={contactSearch} onChange={(e) => setContactSearch(e.target.value)}
                       placeholder="Filter contacts…" style={{ flex: 1, minWidth: '160px' }} />
-                    {(groups.length > 0 || tags.length > 0) && (
-                      <select className="input" value="" onChange={(e) => e.target.value && addAudience(e.target.value)}
-                        style={{ width: 'auto', minWidth: '170px' }} aria-label="Add a whole group or tag">
-                        <option value="">+ Add a group or tag…</option>
-                        {groups.length > 0 && (
-                          <optgroup label="Groups">
-                            {groups.map((g) => (
-                              <option key={g.id} value={`group:${g.id}`}>
-                                {g.name} ({activeContacts.filter((c) => c.groupIds?.includes(g.id)).length})
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {tags.length > 0 && (
-                          <optgroup label="Tags">
-                            {tags.map((t) => (
-                              <option key={t} value={`tag:${t}`}>{t} ({activeContacts.filter((c) => c.tags.includes(t)).length})</option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
-                    )}
+                    <Select className="input" value="" onChange={(e) => e.target.value && addAudience(e.target.value)}
+                      style={{ width: 'auto', minWidth: '190px' }} aria-label="Add a follow-up list, group or tag">
+                      <option value="">+ Add people…</option>
+                      <option value={`assigned:${user.id}`}>
+                        My follow-up list ({activeContacts.filter((c) => c.assignedTo === user.id).length})
+                      </option>
+                      {groups.length > 0 && (
+                        <optgroup label="Groups">
+                          {groups.map((g) => (
+                            <option key={g.id} value={`group:${g.id}`}>
+                              {g.name} ({activeContacts.filter((c) => c.groupIds?.includes(g.id)).length})
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {tags.length > 0 && (
+                        <optgroup label="Tags">
+                          {tags.map((t) => (
+                            <option key={t} value={`tag:${t}`}>{t} ({activeContacts.filter((c) => c.tags.includes(t)).length})</option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </Select>
                   </div>
                   <div style={{ maxHeight: '200px', overflowY: 'auto', border: '1px solid var(--border)', borderRadius: '8px', background: 'var(--surface)' }}>
                     {filteredContacts.map((c) => (
@@ -271,7 +277,7 @@ export default function MessagingModule({ user, contacts, groups, logs, onLogsCh
                           style={{ accentColor: 'var(--navy)', width: '14px', height: '14px', flexShrink: 0 }} />
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ fontSize: '13.5px', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</p>
-                          <p className="mono" style={{ fontSize: '12px', color: 'var(--text-3)' }}>{c.phone}</p>
+                          <p className="mono" style={{ fontSize: '12px', color: 'var(--text-3)' }}>{displayPhone(user, c)}</p>
                         </div>
                       </label>
                     ))}
@@ -340,7 +346,7 @@ export default function MessagingModule({ user, contacts, groups, logs, onLogsCh
                     <p style={{ fontSize: '11px', color: 'var(--text-3)', marginTop: '6px', textAlign: 'right' }}>Delivered · Just now</p>
                   </>
                 ) : (
-                  <p style={{ color: 'var(--text-3)', fontSize: '13px', fontStyle: 'italic' }}>Type a message to preview…</p>
+                  <p style={{ color: 'var(--text-3)', fontSize: '13px', fontStyle: 'italic' }}>Pick a template to preview…</p>
                 )}
               </div>
 
@@ -359,16 +365,16 @@ export default function MessagingModule({ user, contacts, groups, logs, onLogsCh
                   </svg>
                 </span>
               </div>
-              <select className="input" value={logFilterCh} onChange={(e) => setLogFilterCh(e.target.value)} style={{ width: 'auto', minWidth: '130px' }}>
+              <Select className="input" value={logFilterCh} onChange={(e) => setLogFilterCh(e.target.value)} style={{ width: 'auto', minWidth: '130px' }}>
                 <option value="">All channels</option>
                 <option value="sms">SMS</option>
                 <option value="whatsapp">WhatsApp</option>
                 <option value="both">SMS + WhatsApp</option>
-              </select>
-              <select className="input" value={logFilterStatus} onChange={(e) => setLogFilterStatus(e.target.value)} style={{ width: 'auto', minWidth: '130px' }}>
+              </Select>
+              <Select className="input" value={logFilterStatus} onChange={(e) => setLogFilterStatus(e.target.value)} style={{ width: 'auto', minWidth: '130px' }}>
                 <option value="">All statuses</option>
                 {(Object.keys(STATUS_LABEL) as MessageStatus[]).map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
-              </select>
+              </Select>
               <button className="btn btn-outline btn-sm" onClick={reloadHistory} disabled={refreshing} title="Check for new delivery reports">
                 {refreshing ? 'Refreshing…' : 'Refresh'}
               </button>
@@ -391,7 +397,7 @@ export default function MessagingModule({ user, contacts, groups, logs, onLogsCh
                       <th style={{ paddingLeft: '24px' }}>Recipient</th>
                       <th>Channel</th>
                       <th className="col-message">Message</th>
-                      <th>Date</th>
+                      <th>Date / sent by</th>
                       <th style={{ textAlign: 'right', paddingRight: '24px' }}>Status</th>
                     </tr>
                   </thead>
@@ -400,7 +406,9 @@ export default function MessagingModule({ user, contacts, groups, logs, onLogsCh
                       <tr key={log.id}>
                         <td style={{ paddingLeft: '24px' }}>
                           <p style={{ fontWeight: 600 }}>{log.contactName}</p>
-                          <p className="mono" style={{ fontSize: '12px', color: 'var(--text-3)' }}>{log.contactPhone}</p>
+                          <p className="mono" style={{ fontSize: '12px', color: 'var(--text-3)' }}>
+                            {canSeeFullPhones(user) ? log.contactPhone : maskPhone(log.contactPhone)}
+                          </p>
                         </td>
                         <td>
                           <span className={`badge ${log.channel === 'whatsapp' || log.channel === 'both' ? 'badge-green' : 'badge-blue'}`}>
@@ -414,7 +422,7 @@ export default function MessagingModule({ user, contacts, groups, logs, onLogsCh
                         </td>
                         <td style={{ color: 'var(--text-3)', fontSize: '12.5px', whiteSpace: 'nowrap' }}>
                           {new Date(log.sentAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                          <p style={{ fontSize: '11.5px', color: 'var(--text-4)' }}>{log.kind === 'scheduled' ? log.sentBy : `by ${log.sentBy}`}</p>
+                          <p style={{ fontSize: '11.5px', color: 'var(--text-4)', whiteSpace: 'normal', maxWidth: '220px' }}>{senderCaption(log)}</p>
                         </td>
                         <td style={{ textAlign: 'right', paddingRight: '24px', maxWidth: '220px' }}>
                           <span className={`badge ${STATUS_BADGE[log.status] ?? 'badge-amber'}`} title={statusHint(log)}>

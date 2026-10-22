@@ -1,11 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AuthUser, UserRole } from '../../types';
 import { store } from '../../lib/store';
 import { ROLE_DESCRIPTION, ROLE_LABEL, assignableRoles, canManageUser } from '../../lib/permissions';
 import { fmtDate } from '../../lib/services';
 import { adminUsers } from '../../lib/cloud';
 import { useToast } from '../ui/Toast';
+import Select from '../ui/Select';
 import { MIN_PASSWORD_LENGTH, passwordError } from '../../lib/passwordRules';
+import { formatDuration, loadUsage, type UsageRow } from '../../lib/metrics';
 
 interface Props { currentUser: AuthUser; }
 
@@ -24,6 +26,10 @@ export default function UsersModule({ currentUser }: Props) {
   const [error, setError] = useState('');
   const [created, setCreated] = useState<Credentials | null>(null);
   const [busy, setBusy] = useState(false);
+  const [usage, setUsage] = useState<UsageRow[]>([]);
+
+  useEffect(() => { void loadUsage().then(setUsage); }, []);
+  const usageById = new Map(usage.map((u) => [u.userId, u]));
 
   function persist(next: AuthUser[]) {
     store.saveUsers(next);
@@ -138,6 +144,8 @@ export default function UsersModule({ currentUser }: Props) {
                   <th style={{ paddingLeft: '20px' }}>User</th>
                   <th>Email</th>
                   <th>Role</th>
+                  <th>Logins</th>
+                  <th>Time in app</th>
                   <th>Added</th>
                   <th style={{ textAlign: 'right', paddingRight: '20px' }}>Actions</th>
                 </tr>
@@ -148,14 +156,15 @@ export default function UsersModule({ currentUser }: Props) {
                   const elevated = u.role !== 'authorized';
                   const isSelf = u.id === currentUser.id;
                   const manageable = canManageUser(currentUser, u);
+                  const stats = usageById.get(u.id);
                   return (
                     <tr key={u.id}>
                       <td style={{ paddingLeft: '20px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <div style={{
                             width: '36px', height: '36px', borderRadius: '50%', flexShrink: 0,
-                            background: elevated ? 'linear-gradient(135deg, #C8A84B, #8C6F1E)' : 'var(--navy-light)',
-                            border: `1px solid ${elevated ? 'var(--gold-border)' : '#BFCFE9'}`,
+                            background: elevated ? '#C41E3A' : 'var(--navy-light)',
+                            border: `1px solid ${elevated ? 'var(--gold-border)' : '#D0D0D0'}`,
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             fontSize: '12px', fontWeight: 700, color: elevated ? '#fff' : 'var(--navy)', fontFamily: 'Inter, sans-serif',
                           }}>
@@ -170,14 +179,16 @@ export default function UsersModule({ currentUser }: Props) {
                       <td style={{ color: 'var(--text-2)', fontSize: '13px', fontFamily: 'JetBrains Mono, monospace' }}>{u.email}</td>
                       <td>
                         {manageable && allowedRoles.length > 1 ? (
-                          <select className="input" style={{ width: 'auto', padding: '4px 8px', fontSize: '12.5px' }} value={u.role}
+                          <Select className="input" style={{ width: 'auto', padding: '4px 8px', fontSize: '12.5px' }} value={u.role}
                             onChange={(e) => changeRole(u, e.target.value as UserRole)} aria-label={`Role for ${u.name}`}>
                             {allowedRoles.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-                          </select>
+                          </Select>
                         ) : (
                           <span className={`badge ${ROLE_BADGE[u.role]}`}>{ROLE_LABEL[u.role]}</span>
                         )}
                       </td>
+                      <td style={{ fontSize: '13px' }}>{stats ? stats.logins : '—'}</td>
+                      <td style={{ fontSize: '13px' }}>{stats ? formatDuration(stats.seconds) : '—'}</td>
                       <td style={{ fontSize: '12.5px', color: 'var(--text-3)' }}>
                         {u.createdAt ? `${fmtDate(u.createdAt)}${u.createdBy ? ` by ${u.createdBy}` : ''}` : 'Original account'}
                       </td>
@@ -191,30 +202,6 @@ export default function UsersModule({ currentUser }: Props) {
                 })}
               </tbody>
             </table>
-          </div>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
-          <div className="card" style={{ padding: '18px 20px' }}>
-            <p style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--navy)', marginBottom: '10px' }}>Who can do what</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-              {ROLE_ORDER.map((r) => (
-                <div key={r} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                  <span className={`badge ${ROLE_BADGE[r]}`} style={{ minWidth: '104px', justifyContent: 'center' }}>{ROLE_LABEL[r]}</span>
-                  <p style={{ fontSize: '12.5px', color: 'var(--text-2)', lineHeight: 1.5 }}>{ROLE_DESCRIPTION[r]}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="card" style={{ padding: '18px 20px' }}>
-            <p style={{ fontWeight: 700, fontSize: '13.5px', color: 'var(--navy)', marginBottom: '10px' }}>Security guidelines</p>
-            <ul style={{ fontSize: '12.5px', color: 'var(--text-2)', lineHeight: 1.8, paddingLeft: '18px' }}>
-              <li>Share passwords privately — in person or via encrypted message.</li>
-              <li>Revoke access immediately if a device is lost or a member leaves.</li>
-              <li>Keep at least two Super Admins so the portal is never locked out.</li>
-              <li>Review this list regularly so only active members keep access.</li>
-            </ul>
           </div>
         </div>
       </div>
@@ -248,10 +235,10 @@ export default function UsersModule({ currentUser }: Props) {
                 </div>
                 <div>
                   <label className="label">Role</label>
-                  <select className="input" value={form.role} disabled={allowedRoles.length === 1}
+                  <Select className="input" value={form.role} disabled={allowedRoles.length === 1}
                     onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as UserRole }))}>
                     {allowedRoles.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
-                  </select>
+                  </Select>
                   <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '6px' }}>{ROLE_DESCRIPTION[form.role]}</p>
                   {currentUser.role === 'admin' && (
                     <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '4px' }}>

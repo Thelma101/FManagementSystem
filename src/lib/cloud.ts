@@ -7,6 +7,7 @@
 import type { ActivityEntry, AuthUser, MessageLog, UserRole } from '../types';
 import { store, type CollectionKey } from './store';
 import { supabase } from './supabase';
+import { logMetric } from './metrics';
 
 interface TableSpec {
   table: string;
@@ -27,9 +28,10 @@ const TABLES: Record<Exclude<CollectionKey, 'fp_users'>, TableSpec> = {
     table: 'contacts',
     columns: [
       'id', 'name', 'phone', 'addedBy', 'addedAt',
-      'tags', 'notes', 'lastContacted', 'archived', 'metLocation', 'metDate', 'bornAgain', 'salvationDate',
+      'tags', 'notes', 'lastContacted', 'archived', 'metLocation', 'metDate', 'homeLocation', 'closestChurch',
+      'bornAgain', 'salvationDate',
       'salvationPlace', 'baptised', 'baptismDate', 'inCellFellowship', 'cellName', 'attendanceCommitment',
-      'committedServices', 'committedSpecialEvent', 'welcomeSentAt', 'baptismPlace', 'custom', 'groupIds',
+      'committedServices', 'committedSpecialEvent', 'welcomeSentAt', 'baptismPlace', 'custom', 'groupIds', 'assignedTo',
     ],
     dates: ['addedAt', 'lastContacted', 'metDate', 'salvationDate', 'baptismDate', 'welcomeSentAt'],
     defaults: { groupIds: [], tags: [], notes: '', archived: false },
@@ -45,7 +47,7 @@ const TABLES: Record<Exclude<CollectionKey, 'fp_users'>, TableSpec> = {
     table: 'message_logs',
     columns: [
       'id', 'contactId', 'contactName', 'contactPhone', 'channel', 'content', 'status', 'statusDetail', 'statusAt',
-      'sentAt', 'sentBy', 'kind',
+      'sentAt', 'sentBy', 'sentByEmail', 'kind',
     ],
     dates: ['sentAt', 'statusAt'],
     readOnly: ['statusAt'],
@@ -295,6 +297,7 @@ export async function signIn(email: string, password: string): Promise<SignInRes
     return { ok: false, error: 'This account does not have portal access. Ask a Super Admin to add you.' };
   }
   await loadAll();
+  logMetric('signed_in', 'sessions');
   return { ok: true, user };
 }
 

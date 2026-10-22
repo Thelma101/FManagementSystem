@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { changePassword } from '../../lib/cloud';
 import { MIN_PASSWORD_LENGTH, passwordError } from '../../lib/passwordRules';
+import BrandMark from '../brand/BrandMark';
 
 interface Props {
   name?: string;
@@ -29,8 +30,9 @@ export default function SetPasswordScreen({ name, reason, onDone, onCancel }: Pr
   }
 
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', background: 'linear-gradient(150deg, #001845 0%, #002B6B 50%, #1A4080 100%)' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px', background: '#111111', boxShadow: 'inset 0 3px 0 0 #C41E3A, inset 0 5px 0 0 #F5C400' }}>
       <div className="card" style={{ width: '100%', maxWidth: '420px', padding: '32px 30px' }}>
+        <div style={{ marginBottom: '16px' }}><BrandMark size={48} label="Living Faith Church" /></div>
         <p style={{ fontSize: '11px', fontWeight: 700, color: 'var(--navy)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px' }}>
           {reason === 'first-login' ? 'First sign-in' : 'Password reset'}
         </p>

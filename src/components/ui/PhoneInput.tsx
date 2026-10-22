@@ -7,6 +7,7 @@ import {
   nationalFromE164,
   type CountryCode,
 } from '../../lib/phone';
+import Select from './Select';
 
 interface Props {
   /** Current E.164 value (or empty). */
@@ -72,7 +73,7 @@ export default function PhoneInput({
   return (
     <div>
       <div style={{ display: 'flex', gap: '8px' }}>
-        <select
+        <Select
           className="input"
           value={country}
           onChange={(e) => handleCountryChange(e.target.value as CountryCode)}
@@ -84,7 +85,7 @@ export default function PhoneInput({
               {c.label}
             </option>
           ))}
-        </select>
+        </Select>
         <input
           id={id}
           type="tel"

@@ -20,8 +20,8 @@ export interface Report {
 export type ExportFormat = 'xlsx' | 'pdf' | 'docx';
 
 const ORG = 'Fellowship Portal';
-const NAVY = '#002B6B';
-const NAVY_LIGHT = '#EEF3FB';
+const NAVY = '#111111';
+const NAVY_LIGHT = '#F2F2F2';
 
 function generatedAt() {
   return new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });

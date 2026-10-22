@@ -7,6 +7,8 @@ import {
 } from '../../lib/services';
 import { exportReport, type ExportFormat, type Report } from '../../lib/exporters';
 import { useToast } from '../ui/Toast';
+import Select from '../ui/Select';
+import { logMetric } from '../../lib/metrics';
 
 type ReportType = 'attendance-weekly' | 'attendance-contact' | 'weekly-summary' | 'contacts';
 
@@ -136,6 +138,7 @@ function buildReport(type: ReportType, weeks: string[], contacts: Contact[], rec
 
   const pct = (n: number) => (contacts.length ? `${Math.round((n / contacts.length) * 100)}%` : '—');
   const yesNoFields = fields.filter((f) => f.type === 'yesno');
+  const staffName = new Map(store.getUsers().map((u) => [u.id, u.name]));
   return {
     title: 'Contacts Register',
     subtitle: `${contacts.length} contacts`,
@@ -149,6 +152,7 @@ function buildReport(type: ReportType, weeks: string[], contacts: Contact[], rec
     columns: [
       { header: 'Name', width: 22 }, { header: 'Phone', width: 17 },
       { header: 'Where met', width: 20 }, { header: 'Date met', width: 12 },
+      { header: 'Home / area', width: 22 }, { header: 'Closest church', width: 22 },
       { header: 'Born again', width: 9 }, { header: 'Salvation date', width: 12 }, { header: 'Salvation place', width: 18 },
       { header: 'Baptised', width: 9 }, { header: 'Baptism date', width: 12 }, { header: 'Baptism place', width: 18 },
       { header: 'Cell Fellowship', width: 18 }, { header: 'Committed to', width: 26 },
@@ -158,11 +162,13 @@ function buildReport(type: ReportType, weeks: string[], contacts: Contact[], rec
         ...(f.type === 'yesno' && f.askPlace ? [{ header: `${f.label} place`, width: 18 }] : []),
       ]),
       { header: 'Tags', width: 16 }, { header: 'Notes', width: 34 },
+      { header: 'Follow-up assigned to', width: 18 },
       { header: 'Added by', width: 16 }, { header: 'Added on', width: 12 }, { header: 'Welcome sent', width: 12 },
     ],
     rows: contacts.map((c) => [
       c.name, c.phone,
       c.metLocation || '—', fmtDate(c.metDate),
+      c.homeLocation || '—', c.closestChurch || '—',
       yesNo(c.bornAgain), fmtDate(c.salvationDate), c.salvationPlace || '—',
       yesNo(c.baptised), fmtDate(c.baptismDate), c.baptismPlace || '—',
       c.inCellFellowship ? c.cellName || 'Yes' : yesNo(c.inCellFellowship),
@@ -176,6 +182,7 @@ function buildReport(type: ReportType, weeks: string[], contacts: Contact[], rec
         ];
       }),
       c.tags.join(', ') || '—', c.notes || '—',
+      (c.assignedTo && staffName.get(c.assignedTo)) || (c.assignedTo ? c.assignedTo : '—'),
       c.addedBy, fmtDate(c.addedAt), c.welcomeSentAt ? fmtDate(c.welcomeSentAt) : 'No',
     ]),
   };
@@ -221,6 +228,8 @@ export default function ReportsModule({ contacts }: { contacts: Contact[] }) {
     setBusy(format);
     try {
       const file = await exportReport(report, format);
+      const kind = format === 'xlsx' ? 'Excel' : format === 'pdf' ? 'PDF' : 'Word';
+      logMetric('downloaded', 'reports', `${kind} · ${report.rows.length} rows`, report.title);
       toast('success', 'Report downloaded', file);
     } catch (err) {
       console.error(err);
@@ -260,13 +269,13 @@ export default function ReportsModule({ contacts }: { contacts: Contact[] }) {
         <div style={{ display: 'flex', gap: '8px', paddingBottom: '14px', flexWrap: 'wrap', alignItems: 'center' }}>
           {!isDateless && (
             <>
-              <select className="input" style={{ width: 'auto' }} value={preset} onChange={(e) => setPreset(e.target.value as Preset)} aria-label="Period">
+              <Select className="input" style={{ width: 'auto' }} value={preset} onChange={(e) => setPreset(e.target.value as Preset)} aria-label="Period">
                 <option value="this-week">This week</option>
                 <option value="last-4">Last 4 weeks</option>
                 <option value="last-12">Last 12 weeks</option>
                 <option value="this-year">This year</option>
                 <option value="custom">Custom range…</option>
-              </select>
+              </Select>
               {preset === 'custom' && (
                 <>
                   <input type="date" className="input" style={{ width: 'auto' }} value={customFrom} max={toIsoDate(new Date())} onChange={(e) => setCustomFrom(e.target.value)} aria-label="From" />
@@ -276,11 +285,11 @@ export default function ReportsModule({ contacts }: { contacts: Contact[] }) {
               )}
             </>
           )}
-          <select className="input" style={{ width: 'auto' }} value={scope} onChange={(e) => setScope(e.target.value as typeof scope)} aria-label="Contacts">
+          <Select className="input" style={{ width: 'auto' }} value={scope} onChange={(e) => setScope(e.target.value as typeof scope)} aria-label="Contacts">
             <option value="active">Active contacts</option>
             <option value="committed">Committed to attend</option>
             <option value="all">All incl. archived</option>
-          </select>
+          </Select>
           {!isDateless && <span style={{ fontSize: '12.5px', color: 'var(--text-3)' }}>{report.subtitle}</span>}
         </div>
       </div>

@@ -71,7 +71,7 @@ export interface Target {
   key: string;
   label: string;
   kind: TargetKind;
-  group: 'Contact' | 'Where we met' | 'Spiritual status' | 'More details';
+  group: 'Contact' | 'Where we met' | 'Where they live' | 'Spiritual status' | 'More details';
   synonyms?: string[];
 }
 
@@ -84,6 +84,9 @@ const BASE_TARGETS: Target[] = [
   { key: 'notes', label: 'Notes', kind: 'text', group: 'Contact', synonyms: ['note', 'comment', 'comments', 'remarks', 'prayer points', 'prayer request'] },
   { key: 'metLocation', label: 'Location met', kind: 'text', group: 'Where we met', synonyms: ['where met', 'location', 'met at', 'place met', 'venue', 'outreach location'] },
   { key: 'metDate', label: 'Date met', kind: 'date', group: 'Where we met', synonyms: ['met date', 'date', 'met on', 'outreach date'] },
+  { key: 'homeLocation', label: 'Home / area', kind: 'text', group: 'Where they live', synonyms: ['home', 'address', 'residence', 'lives', 'where they live', 'home location', 'area'] },
+  { key: 'closestChurch', label: 'Closest church', kind: 'text', group: 'Where they live', synonyms: ['nearest church', 'church', 'closest assembly', 'home church'] },
+  { key: 'assignedTo', label: 'Follow-up assigned to', kind: 'text', group: 'Contact', synonyms: ['assigned to', 'follow up', 'follow-up', 'worker', 'counsellor'] },
   { key: 'bornAgain', label: 'Born again', kind: 'yesno', group: 'Spiritual status', synonyms: ['saved', 'born-again', 'gave life to christ'] },
   { key: 'salvationDate', label: 'Salvation date', kind: 'date', group: 'Spiritual status', synonyms: ['date saved', 'date of salvation', 'born again date'] },
   { key: 'salvationPlace', label: 'Salvation place', kind: 'text', group: 'Spiritual status', synonyms: ['place saved', 'where saved', 'place of salvation', 'born again place'] },
@@ -212,7 +215,8 @@ export function buildRows(sheet: Sheet, mapping: (string | '')[], targets: Targe
     const baptismDate = date('baptismDate'), baptismPlace = text('baptismPlace') || undefined;
     const cellName = text('cellName') || undefined;
     const bornAgain = yesno('bornAgain') ?? (salvationDate || salvationPlace ? true : undefined);
-    const baptised = yesno('baptised') ?? (baptismDate || baptismPlace ? true : undefined);
+    const baptisedRaw = yesno('baptised') ?? (baptismDate || baptismPlace ? true : undefined);
+    const baptised = bornAgain === true ? baptisedRaw : undefined;
     const inCell = yesno('inCellFellowship') ?? (cellName ? true : undefined);
 
     const custom: Record<string, CustomValue> = {};
@@ -252,6 +256,9 @@ export function buildRows(sheet: Sheet, mapping: (string | '')[], targets: Targe
       notes: text('notes'),
       metLocation: text('metLocation') || undefined,
       metDate: date('metDate'),
+      homeLocation: text('homeLocation') || undefined,
+      closestChurch: text('closestChurch') || undefined,
+      assignedTo: text('assignedTo') || undefined,
       bornAgain,
       salvationDate: bornAgain ? salvationDate : undefined,
       salvationPlace: bornAgain ? salvationPlace : undefined,
@@ -275,7 +282,9 @@ export async function downloadTemplate(fields: ContactField[]): Promise<void> {
   const headers = templateHeaders(fields);
   const sample: Record<string, string> = {
     Name: 'Adaeze Okonkwo', Phone: '0803 123 4567', Tags: 'harvest-field', Notes: 'Prays for her family',
-    'Location met': 'Lekki Phase 1 bus stop by Zenith Bank', 'Date met': '28/09/2026', 'Born again': 'Y', 'Salvation date': '28/09/2026',
+    'Location met': 'Lekki Phase 1 bus stop by Zenith Bank', 'Date met': '28/09/2026',
+    'Home / area': 'Ajah, Abraham Adesanya', 'Closest church': 'Winners Chapel Lekki Zone',
+    'Born again': 'Y', 'Salvation date': '28/09/2026',
     'Salvation place': 'Lekki Phase 1 outreach', Baptised: 'N', 'Baptism date': '', 'Baptism place': '',
     'Cell fellowship': 'Y', 'Cell name': 'Canaan Estate WSF',
   };

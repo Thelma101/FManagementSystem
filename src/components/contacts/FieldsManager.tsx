@@ -3,6 +3,7 @@ import type { AuthUser, ContactField, FieldType } from '../../types';
 import { store } from '../../lib/store';
 import { FIELD_TYPE_LABEL, activeFields, describeField } from '../../lib/customFields';
 import { useToast } from '../ui/Toast';
+import Select from '../ui/Select';
 
 interface Props {
   user: AuthUser;
@@ -17,7 +18,7 @@ const BLANK: Draft = { label: '', type: 'yesno', askDate: true, askPlace: false,
 /** Built-in questions that already exist on every contact, so admins don't duplicate them. */
 const BUILT_IN = ['saved', 'salvation', 'baptised', 'baptized', 'baptism', 'wsf', 'name', 'phone', 'notes', 'tags', 'groups'];
 /** Blocked anywhere in a label, e.g. "Are you born again?" */
-const BUILT_IN_PHRASES = ['born again', 'cell fellowship'];
+const BUILT_IN_PHRASES = ['born again', 'cell fellowship', 'home location', 'closest church', 'where they live', 'assigned to', 'follow up'];
 
 function duplicatesBuiltIn(label: string) {
   const words = label.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
@@ -101,7 +102,7 @@ export default function FieldsManager({ user, onClose, onChange }: Props) {
 
         <div className="modal-body">
           <p style={{ fontSize: '12.5px', color: 'var(--text-3)' }}>
-            Always asked: born again (date, place), baptised (date, place), cell fellowship, where you met, and service commitment.
+            Always asked: born again (date, place), baptised after they are born again, cell fellowship, where you met, where they live, closest church, and service commitment.
           </p>
 
           {active.length === 0 && !draft && (
@@ -134,11 +135,11 @@ export default function FieldsManager({ user, onClose, onChange }: Props) {
                 </div>
                 <div>
                   <label className="label">Answer type</label>
-                  <select className="input" value={draft.type} disabled={!!draft.id}
+                  <Select className="input" value={draft.type} disabled={!!draft.id}
                     title={draft.id ? 'The answer type can’t change once a field exists, so saved answers stay valid.' : ''}
                     onChange={(e) => setDraft({ ...draft, type: e.target.value as FieldType })}>
                     {(Object.keys(FIELD_TYPE_LABEL) as FieldType[]).map((t) => <option key={t} value={t}>{FIELD_TYPE_LABEL[t]}</option>)}
-                  </select>
+                  </Select>
                 </div>
               </div>
               {draft.type === 'yesno' && (

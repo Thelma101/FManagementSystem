@@ -1,43 +1,45 @@
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import 'tailwindcss';
 
-/* ── Living Faith Church Brand Tokens ────────────────────────────────────── */
+/* ── Winners' Chapel colours: black, red, yellow ─────────────────────────── */
 :root {
-  /* Brand primaries */
-  --navy:          #002B6B;
-  --navy-dark:     #001845;
-  --navy-mid:      #1A4080;
-  --navy-light:    #EEF3FB;
-  --navy-xlight:   #F5F8FD;
+  /* --navy is kept as the name used in JSX; the value is now black. */
+  --navy:          #111111;
+  --navy-dark:     #000000;
+  --navy-mid:      #2A2A2A;
+  --navy-light:    #F2F2F2;
+  --navy-xlight:   #F7F7F7;
 
-  --gold:          #C8A84B;
-  --gold-dark:     #8C6F1E;
-  --gold-mid:      #A88A2C;
-  --gold-light:    #F7EDD0;
-  --gold-xlight:   #FDF9EE;
-  --gold-border:   #E8D18A;
+  --gold:          #F5C400;
+  --gold-dark:     #A67C00;
+  --gold-mid:      #E0B000;
+  --gold-light:    #FFF3C2;
+  --gold-xlight:   #FFF8DC;
+  --gold-border:   #E8C200;
+
+  --brand-red:     #C41E3A;
 
   /* Semantic surfaces */
-  --bg:            #F8F9FC;
+  --bg:            #F3F3F3;
   --surface:       #FFFFFF;
-  --surface-2:     #F5F7FB;
-  --border:        #E2E8F0;
-  --border-2:      #CBD5E1;
+  --surface-2:     #EFEFEF;
+  --border:        #E0E0E0;
+  --border-2:      #C8C8C8;
 
   /* Text scale */
-  --text:          #0A1628;
-  --text-2:        #334155;
-  --text-3:        #64748B;
-  --text-4:        #94A3B8;
+  --text:          #111111;
+  --text-2:        #333333;
+  --text-3:        #666666;
+  --text-4:        #8A8A8A;
 
   /* Status colors */
   --green:         #15803D;
   --green-bg:      #DCFCE7;
   --green-border:  #86EFAC;
 
-  --red:           #B91C1C;
-  --red-bg:        #FEE2E2;
-  --red-border:    #FCA5A5;
+  --red:           #C41E3A;
+  --red-bg:        #FDE8EC;
+  --red-border:    #F0A8B4;
 
   --amber:         #B45309;
   --amber-bg:      #FEF3C7;
@@ -52,24 +54,28 @@
   --purple-border: #C4B5FD;
 
   /* Legacy aliases so existing JSX using old vars keeps working */
-  --beige:         #F7EDD0;
-  --beige-dark:    #8C6F1E;
-  --yellow:        #C8A84B;
-  --yellow-bg:     #FDF9EE;
-  --yellow-border: #E8D18A;
+  --beige:         #FFF3C2;
+  --beige-dark:    #A67C00;
+  --yellow:        #F5C400;
+  --yellow-bg:     #FFF8DC;
+  --yellow-border: #E8C200;
 
-  --radius:        8px;
-  --radius-lg:     12px;
-  --radius-xl:     16px;
+  --radius:        4px;
+  --radius-lg:     6px;
+  --radius-xl:     8px;
 
   /* Sidebar tokens */
-  --sidebar-bg:            #002B6B;
+  --sidebar-bg:            #111111;
   --sidebar-text:          rgba(255,255,255,0.72);
-  --sidebar-active-bg:     rgba(200,168,75,0.2);
-  --sidebar-active-text:   #F7EDD0;
-  --sidebar-active-border: rgba(200,168,75,0.6);
-  --sidebar-hover-bg:      rgba(255,255,255,0.07);
+  --sidebar-active-bg:     rgba(245,196,0,0.16);
+  --sidebar-active-text:   #F5C400;
+  --sidebar-active-border: #C41E3A;
+  --sidebar-hover-bg:      rgba(255,255,255,0.06);
   --sidebar-border:        rgba(255,255,255,0.1);
+}
+
+.app-shell {
+  box-shadow: inset 0 3px 0 0 var(--brand-red), inset 0 5px 0 0 var(--gold);
 }
 
 /* ── Reset & base ────────────────────────────────────────────────────────── */
@@ -156,6 +162,7 @@ h1, h2, h3, h4, .serif {
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   background: var(--surface);
+  box-shadow: inset 0 3px 0 0 var(--gold);
 }
 
 /* ── Cards ───────────────────────────────────────────────────────────────── */
@@ -197,11 +204,10 @@ h1, h2, h3, h4, .serif {
 .btn-primary {
   background: var(--navy);
   color: #fff;
-  box-shadow: 0 1px 3px rgba(0,43,107,0.3);
+  box-shadow: none;
 }
 .btn-primary:hover:not(:disabled) {
   background: var(--navy-mid);
-  box-shadow: 0 4px 12px rgba(0,43,107,0.3);
 }
 
 .btn-gold {
@@ -285,17 +291,85 @@ h1, h2, h3, h4, .serif {
 }
 .input::placeholder { color: var(--text-4); }
 .input:focus {
-  border-color: var(--navy);
-  box-shadow: 0 0 0 3px rgba(0,43,107,0.1);
+  border-color: var(--gold);
+  box-shadow: none;
 }
 textarea.input { resize: none; }
 select.input {
   cursor: pointer;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  border-radius: var(--radius-xl);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23C41E3A' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 11px center;
   padding-right: 34px;
+}
+select.input:focus,
+.app-select-btn:focus {
+  border-color: var(--brand-red);
+  box-shadow: 0 0 0 3px rgba(196, 30, 58, 0.15);
+}
+
+.app-select {
+  position: relative;
+  display: inline-flex;
+  vertical-align: top;
+  min-width: 0;
+}
+.app-select-btn {
+  cursor: pointer;
+  appearance: none;
+  border-radius: var(--radius-xl);
+  text-align: left;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23C41E3A' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 11px center;
+  padding-right: 34px;
+}
+.app-select-menu {
+  z-index: 90;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 10px 28px rgba(17, 17, 17, 0.14);
+  max-height: 280px;
+  overflow-y: auto;
+}
+.app-select-group {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  padding: 8px 10px 4px;
+}
+.app-select-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-family: Inter, sans-serif;
+  color: var(--text);
+}
+.app-select-option:hover:not(:disabled) {
+  background: var(--red-bg);
+  color: var(--brand-red);
+}
+.app-select-option.on {
+  background: var(--brand-red);
+  color: #fff;
+}
+.app-select-option:disabled {
+  color: var(--text-4);
+  cursor: not-allowed;
 }
 
 /* ── Labels ──────────────────────────────────────────────────────────────── */
@@ -329,7 +403,7 @@ select.input {
 .badge-red    { background: var(--red-bg);     color: var(--red);     border-color: var(--red-border); }
 .badge-blue   { background: var(--blue-bg);    color: var(--blue);    border-color: var(--blue-border); }
 .badge-gold   { background: var(--gold-light); color: var(--gold-dark); border-color: var(--gold-border); }
-.badge-navy   { background: var(--navy-light); color: var(--navy);    border-color: #BFCFE9; }
+.badge-navy   { background: var(--navy-light); color: var(--navy);    border-color: #D0D0D0; }
 .badge-purple { background: var(--purple-bg);  color: var(--purple);  border-color: var(--purple-border); }
 
 /* ── Table ───────────────────────────────────────────────────────────────── */
@@ -343,7 +417,7 @@ select.input {
   text-transform: uppercase;
   letter-spacing: 0.07em;
   border-bottom: 1px solid var(--border);
-  background: var(--surface-2);
+  background: transparent;
   white-space: nowrap;
   font-family: 'Inter', sans-serif;
 }
@@ -435,7 +509,7 @@ select.input {
   transition: background 0.14s, color 0.14s;
 }
 .seg button + button { border-left: 1.5px solid var(--border); }
-.seg button.on { background: var(--navy-light); color: var(--navy); font-weight: 600; }
+.seg button.on { background: var(--gold); color: #111; font-weight: 600; }
 .seg button:hover:not(.on) { background: var(--surface-2); }
 
 .field-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -452,7 +526,7 @@ select.input {
 }
 .alert-amber { background: var(--amber-bg); border: 1px solid var(--amber-border); color: #7C3F06; }
 .alert-red   { background: var(--red-bg);   border: 1px solid var(--red-border);   color: var(--red); }
-.alert-navy  { background: var(--navy-xlight); border: 1px solid #BFCFE9; color: var(--navy); }
+.alert-navy  { background: var(--navy-xlight); border: 1px solid #D0D0D0; color: var(--navy); }
 
 /* Attendance grid checkbox cell */
 .att-cell { text-align: center; }
@@ -493,7 +567,7 @@ hr.divider { border: none; border-top: 1px solid var(--border); }
   background: var(--sidebar-active-bg);
   color: var(--sidebar-active-text);
   font-weight: 600;
-  border-left: 3px solid var(--gold);
+  border-left: 3px solid var(--brand-red);
   padding-left: 9px;
 }
 .nav-inactive {
@@ -531,29 +605,42 @@ hr.divider { border: none; border-top: 1px solid var(--border); }
 .progress-fill {
   height: 100%;
   border-radius: 3px;
-  background: var(--navy);
+  background: var(--gold);
   transition: width 0.5s cubic-bezier(0.22,1,0.36,1);
 }
 
 /* ── Chip toggle ─────────────────────────────────────────────────────────── */
 .chip {
-  padding: 5px 13px;
-  border-radius: 99px;
+  padding: 5px 11px;
+  border-radius: 4px;
   font-size: 12.5px;
   font-weight: 500;
   font-family: 'Inter', sans-serif;
-  border: 1.5px solid var(--border);
-  background: transparent;
-  color: var(--text-3);
+  border: 1px solid var(--border-2);
+  background: var(--surface);
+  color: var(--text-2);
   cursor: pointer;
-  transition: all 0.14s;
+  transition: border-color 0.12s, background 0.12s, color 0.12s;
 }
 .chip:hover { border-color: var(--navy); color: var(--navy); }
 .chip-on {
-  background: var(--navy-light);
-  border-color: #BFCFE9;
-  color: var(--navy);
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #111;
   font-weight: 600;
+}
+
+.kicker {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--brand-red);
+  border-left: 3px solid var(--brand-red);
+  padding: 0 0 0 10px;
+  margin-bottom: 14px;
+  background: none;
 }
 
 /* ── Action row ──────────────────────────────────────────────────────────── */
@@ -624,8 +711,9 @@ hr.divider { border: none; border-top: 1px solid var(--border); }
   padding: 0 4px;
 }
 .mobile-nav-btn.active {
-  color: #C8A84B;
-  background: rgba(200,168,75,0.12);
+  color: #F5C400;
+  background: transparent;
+  border-top: 2px solid var(--brand-red);
 }
 .mobile-nav-btn:hover { color: rgba(255,255,255,0.85); }
 
