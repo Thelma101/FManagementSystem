@@ -802,8 +802,6 @@ hr.divider { border: none; border-top: 1px solid var(--border); }
   /* Hide sidebar desktop chrome */
   .sidebar-desktop { display: none; }
 
-  /* Messaging history: hide some columns */
-  .col-message { display: none; }
 }
 
 /* Login mobile top bar — hidden on desktop */

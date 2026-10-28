@@ -209,7 +209,7 @@ export default function MessagingModule({ user, contacts, groups, logs, onLogsCh
                     ))}
                   </div>
                   <p style={{ fontSize: '12.5px', color: 'var(--text-3)', marginTop: '8px' }}>
-                    Pick a template. The wording is fixed so every send is on record as the same approved message.
+                    Pick a template.
                   </p>
                 </div>
 
@@ -326,7 +326,7 @@ export default function MessagingModule({ user, contacts, groups, logs, onLogsCh
                   {gateway && (
                     <p style={{ fontSize: '12px', color: gateway.configured ? 'var(--text-3)' : 'var(--amber)', marginTop: '6px' }}>
                       {gateway.configured
-                        ? `SMS goes out as "${gateway.sender}"; WhatsApp from the church's connected WhatsApp number${gateway.balance !== undefined ? ` · ${gateway.balance} SMS units left` : ''}.`
+                        ? `SMS goes out as "${gateway.sender}"${gateway.balance !== undefined ? ` · ${gateway.balance} SMS units left` : ''}.`
                         : 'Sending is not set up: add the SMS settings on the server before messages can go out.'}
                     </p>
                   )}
@@ -390,52 +390,41 @@ export default function MessagingModule({ user, contacts, groups, logs, onLogsCh
                   <h3>No messages match</h3>
                 </div>
               ) : (
-                <div className="table-scroll">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th style={{ paddingLeft: '24px' }}>Recipient</th>
-                      <th>Channel</th>
-                      <th className="col-message">Message</th>
-                      <th>Date / sent by</th>
-                      <th style={{ textAlign: 'right', paddingRight: '24px' }}>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredLogs.map((log) => (
-                      <tr key={log.id}>
-                        <td style={{ paddingLeft: '24px' }}>
+                <div>
+                  {filteredLogs.map((log) => (
+                    <article key={log.id} style={{
+                      padding: '16px 24px',
+                      borderBottom: '1px solid var(--border)',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+                        <div>
                           <p style={{ fontWeight: 600 }}>{log.contactName}</p>
                           <p className="mono" style={{ fontSize: '12px', color: 'var(--text-3)' }}>
                             {canSeeFullPhones(user) ? log.contactPhone : maskPhone(log.contactPhone)}
                           </p>
-                        </td>
-                        <td>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                           <span className={`badge ${log.channel === 'whatsapp' || log.channel === 'both' ? 'badge-green' : 'badge-blue'}`}>
                             {log.channel === 'whatsapp' ? 'WhatsApp' : log.channel === 'both' ? 'Both' : 'SMS'}
                           </span>
-                        </td>
-                        <td className="col-message" style={{ maxWidth: '280px' }}>
-                          <p style={{ color: 'var(--text-2)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '13px' }}>
-                            {log.content}
-                          </p>
-                        </td>
-                        <td style={{ color: 'var(--text-3)', fontSize: '12.5px', whiteSpace: 'nowrap' }}>
-                          {new Date(log.sentAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                          <p style={{ fontSize: '11.5px', color: 'var(--text-4)', whiteSpace: 'normal', maxWidth: '220px' }}>{senderCaption(log)}</p>
-                        </td>
-                        <td style={{ textAlign: 'right', paddingRight: '24px', maxWidth: '220px' }}>
                           <span className={`badge ${STATUS_BADGE[log.status] ?? 'badge-amber'}`} title={statusHint(log)}>
                             {STATUS_LABEL[log.status] ?? log.status}
                           </span>
-                          {(log.status === 'failed' || log.status === 'pending') && log.statusDetail && (
-                            <p style={{ fontSize: '11.5px', color: 'var(--text-3)', marginTop: '3px', whiteSpace: 'normal' }}>{log.statusDetail}</p>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+                      </div>
+                      <p style={{ fontSize: '13.5px', lineHeight: 1.55, color: 'var(--text)', marginTop: '10px', whiteSpace: 'pre-wrap' }}>
+                        {log.content || '—'}
+                      </p>
+                      <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '8px' }}>
+                        {new Date(log.sentAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        {' · '}
+                        {senderCaption(log)}
+                      </p>
+                      {(log.status === 'failed' || log.status === 'pending') && log.statusDetail && (
+                        <p style={{ fontSize: '12px', color: 'var(--text-3)', marginTop: '4px' }}>{log.statusDetail}</p>
+                      )}
+                    </article>
+                  ))}
                 </div>
               )}
             </div>
