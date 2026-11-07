@@ -3,7 +3,7 @@ import type { AuthUser, Contact, ContactGroup, MessageLog, ScheduledEvent, Tab }
 import { store } from './lib/store';
 import { canExportReports, canManageUsers } from './lib/permissions';
 import { visibleLogs } from './lib/privacy';
-import { isConfigured, openedFromRecoveryLink } from './lib/supabase';
+import { clearPasswordRecoveryFlag, isConfigured, isPasswordRecoveryReturn } from './lib/supabase';
 import { hasPendingWrites, onPasswordRecovery, onSyncError, refreshIfStale, restoreSession, signOut } from './lib/cloud';
 import { beginSession, endSession, logMetric } from './lib/metrics';
 import { ToastProvider, useToast } from './components/ui/Toast';
@@ -235,20 +235,28 @@ function Portal() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [booting, setBooting] = useState(true);
   const [bootError, setBootError] = useState('');
-  const [recovery, setRecovery] = useState(openedFromRecoveryLink);
+  const [recovery, setRecovery] = useState(() => isPasswordRecoveryReturn());
 
   function boot() {
     setBootError('');
     setBooting(true);
     restoreSession()
-      .then((u) => { store.setCurrentUser(u); setUser(u); })
+      .then((u) => {
+        store.setCurrentUser(u);
+        setUser(u);
+        // PKCE email links land with ?code=…; the recovery event may arrive during getSession.
+        if (isPasswordRecoveryReturn()) setRecovery(true);
+      })
       .catch((err: unknown) => setBootError(err instanceof Error ? err.message : 'Could not load the portal.'))
       .finally(() => setBooting(false));
   }
 
   useEffect(() => {
+    // Subscribe first so we do not miss PASSWORD_RECOVERY while the session loads.
+    const off = onPasswordRecovery(() => setRecovery(true));
+    if (isPasswordRecoveryReturn()) setRecovery(true);
     boot();
-    return onPasswordRecovery(() => setRecovery(true));
+    return off;
   }, []);
 
   function handleLogin(u: AuthUser) {
@@ -260,6 +268,7 @@ function Portal() {
     logMetric('signed_out', 'sessions');
     await endSession();
     await signOut();
+    clearPasswordRecoveryFlag();
     setRecovery(false);
     setUser(null);
   }
@@ -276,6 +285,7 @@ function Portal() {
         onDone={() => {
           const updated = { ...user, mustChangePassword: false };
           store.setCurrentUser(updated);
+          clearPasswordRecoveryFlag();
           setRecovery(false);
           setUser(updated);
         }}

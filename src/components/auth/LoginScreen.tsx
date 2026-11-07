@@ -45,10 +45,15 @@ export default function LoginScreen({ onLogin }: Props) {
     setError('');
     setInfo('');
     setLoading(true);
-    const err = await requestPasswordReset(email);
-    setLoading(false);
-    if (err) setError(err);
-    else setInfo(`If ${email.trim()} has portal access, a reset link is on its way. Check your inbox (and spam folder).`);
+    try {
+      const err = await requestPasswordReset(email);
+      if (err) setError(err);
+      else setInfo(`If ${email.trim()} has portal access, a reset link is on its way. Check your inbox (and spam folder), then open the link on this same device.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send the reset link. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleRegister(e: React.FormEvent) {
@@ -117,23 +122,30 @@ export default function LoginScreen({ onLogin }: Props) {
 
         <div className="fade-up d1" style={{ position: 'relative' }}>
           <BrandMark size={108} label="Living Faith Church" />
+          <p style={{
+            color: '#F5C400',
+            fontSize: '11px',
+            fontWeight: 700,
+            letterSpacing: '0.16em',
+            textTransform: 'uppercase',
+            marginTop: '28px',
+            marginBottom: '18px',
+          }}>
+            Harvest Field · Follow-up · Establishment
+          </p>
           <h1 style={{
             fontFamily: 'Playfair Display, serif',
             fontSize: 'clamp(1.9rem, 3.2vw, 2.9rem)',
             fontWeight: 500,
             color: '#fff',
             lineHeight: 1.22,
-            marginTop: '28px',
             marginBottom: '18px',
           }}>
-            Records for souls<br />
-            won and followed up.
+            Every Soul Matters.<br />
+            Every Step Counts.
           </h1>
-          <p style={{ color: 'rgba(255,255,255,0.62)', fontSize: '14.5px', lineHeight: 1.8, maxWidth: '380px' }}>
-            Contacts, attendance, templates, and who sent each message.
-          </p>
-          <p style={{ color: '#F5C400', fontSize: '13px', marginTop: '22px', letterSpacing: '0.04em' }}>
-            SMS · WhatsApp · Follow-up · Register
+          <p style={{ color: 'rgba(255,255,255,0.62)', fontSize: '14.5px', lineHeight: 1.8, maxWidth: '400px' }}>
+            Reaching souls, nurturing faith and supporting every journey towards a life established in Christ.
           </p>
         </div>
 

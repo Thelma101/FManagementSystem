@@ -6,7 +6,7 @@
 
 import type { ActivityEntry, AuthUser, MessageLog, UserRole } from '../types';
 import { store, type CollectionKey } from './store';
-import { supabase } from './supabase';
+import { rememberPasswordRecovery, supabase } from './supabase';
 import { logMetric } from './metrics';
 
 interface TableSpec {
@@ -344,10 +344,18 @@ export async function changePassword(password: string): Promise<string | null> {
 }
 
 export async function requestPasswordReset(email: string): Promise<string | null> {
-  const { error } = await client().auth.resetPasswordForEmail(email.trim().toLowerCase(), {
-    redirectTo: window.location.origin,
-  });
-  return error ? error.message : null;
+  rememberPasswordRecovery();
+  const redirectTo = `${window.location.origin}/`;
+  const { error } = await client().auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo });
+  if (!error) return null;
+  const msg = error.message || 'Could not send the reset link.';
+  if (/redirect/i.test(msg)) {
+    return 'The reset link could not be prepared. Ask a Super Admin to add this site URL under Supabase Auth → Redirect URLs.';
+  }
+  if (/rate|limit/i.test(msg)) {
+    return 'Too many reset emails were requested. Wait a few minutes and try again.';
+  }
+  return msg;
 }
 
 export function onPasswordRecovery(fn: () => void): () => void {
