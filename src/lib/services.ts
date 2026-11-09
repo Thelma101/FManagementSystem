@@ -68,5 +68,6 @@ export function fmtWeekRange(weekStart: string): string {
 export function fmtDate(iso?: string): string {
   if (!iso) return '—';
   const d = iso.length === 10 ? fromIsoDate(iso) : new Date(iso);
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  // Medium display: dd/mm/yyyy (en-GB numeric)
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }

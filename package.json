@@ -13,6 +13,7 @@
     "format": "oxfmt",
     "db:migrate": "node --env-file=.env.local scripts/db-migrate.mjs",
     "cron:setup": "node --env-file=.env.local scripts/setup-cron.mjs",
+    "guide:pdf": "node scripts/make-user-guide-pdf.mjs",
     "create-superadmin": "node --env-file=.env.local scripts/create-superadmin.mjs"
   },
   "dependencies": {

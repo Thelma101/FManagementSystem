@@ -25,6 +25,17 @@ interface Item {
   group?: string;
 }
 
+/** Flatten option children (string, number, or mixed nodes like `{name}{suffix}`). */
+function labelFrom(node: ReactNode): string {
+  if (node == null || typeof node === 'boolean') return '';
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(labelFrom).join('');
+  if (isValidElement(node)) {
+    return labelFrom((node.props as { children?: ReactNode }).children);
+  }
+  return '';
+}
+
 function itemsFrom(children: ReactNode, group?: string): Item[] {
   const out: Item[] = [];
   Children.forEach(children, (child) => {
@@ -36,9 +47,7 @@ function itemsFrom(children: ReactNode, group?: string): Item[] {
       return;
     }
     if (type === 'option') {
-      const label = typeof props.children === 'string' || typeof props.children === 'number'
-        ? String(props.children)
-        : String(props.value ?? '');
+      const label = labelFrom(props.children) || String(props.value ?? '');
       out.push({ value: String(props.value ?? ''), label, disabled: props.disabled, group });
     }
   });

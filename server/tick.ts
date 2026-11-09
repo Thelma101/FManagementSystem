@@ -1,12 +1,11 @@
 /**
- * Background job, called every few minutes by the database's scheduler (pg_cron,
- * set up with `npm run cron:setup`):
+ * Background job, called every few minutes (Render Cron Job in production):
  *   1. saves new SMS delivery reports and updates message history,
  *   2. queues the scheduled reminders that are due,
  *   3. sends queued messages for up to ~40 seconds.
  *
- * Authorised by the X-Cron-Key header, derived from SUPABASE_SECRET_KEY so no
- * extra setting is needed.
+ * Authorised by the X-Cron-Key header (from SUPABASE_SECRET_KEY or CRON_SECRET).
+ * Print the key with: npm run cron:setup
  */
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -354,8 +353,9 @@ export async function handleTick(
   if (method !== 'POST') return { status: 405, body: { error: 'Method not allowed' } };
   const url = env.SUPABASE_URL || env.VITE_SUPABASE_URL || env.NEXT_PUBLIC_SUPABASE_URL;
   const secret = env.SUPABASE_SECRET_KEY;
+  const cronSecret = (env as { CRON_SECRET?: string }).CRON_SECRET || secret;
   if (!url || !secret) return { status: 501, body: { error: 'Not configured' } };
-  if (!key || !sameKey(key, cronKey(secret))) return { status: 401, body: { error: 'Unauthorised' } };
+  if (!key || !sameKey(key, cronKey(cronSecret))) return { status: 401, body: { error: 'Unauthorised' } };
 
   const now = deps.now ?? Date.now;
   const fetchImpl = deps.fetch ?? fetch;
