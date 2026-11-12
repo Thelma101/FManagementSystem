@@ -6,7 +6,9 @@ import type {
   ContactGroup,
   MessageLog,
   ScheduledEvent,
+  SupportEntry,
   WelcomeTemplate,
+  Zone,
 } from '../types';
 
 // ── Built-in welcome message templates ───────────────────────────────────────
@@ -43,7 +45,8 @@ function withCurrentBuiltIns(list: WelcomeTemplate[]): WelcomeTemplate[] {
 // An in-memory copy of the Supabase tables, loaded at sign-in. Every save is
 // handed to the cloud sync, which writes the changed rows.
 export type CollectionKey =
-  | 'fp_users' | 'fp_contacts' | 'fp_logs' | 'fp_events' | 'fp_attendance' | 'fp_welcome_templates' | 'fp_fields' | 'fp_groups';
+  | 'fp_users' | 'fp_contacts' | 'fp_logs' | 'fp_events' | 'fp_attendance' | 'fp_welcome_templates' | 'fp_fields' | 'fp_groups'
+  | 'fp_zones' | 'fp_support';
 type CloudSave = (key: CollectionKey, prev: unknown[], next: unknown[]) => void;
 
 let cloud: { data: Record<CollectionKey, unknown[]>; onSave: CloudSave } | null = null;
@@ -84,6 +87,12 @@ export const store = {
 
   getGroups: (): ContactGroup[] => load<ContactGroup>('fp_groups'),
   saveGroups: (g: ContactGroup[]) => save('fp_groups', g),
+
+  getZones: (): Zone[] => load<Zone>('fp_zones'),
+  saveZones: (z: Zone[]) => save('fp_zones', z),
+
+  getSupportDirectory: (): SupportEntry[] => load<SupportEntry>('fp_support'),
+  saveSupportDirectory: (s: SupportEntry[]) => save('fp_support', s),
 
   /** Replace a collection with fresh data from Supabase, without writing it back. */
   replaceFromCloud: (key: CollectionKey, data: unknown[]) => {

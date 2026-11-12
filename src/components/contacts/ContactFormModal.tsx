@@ -1,6 +1,10 @@
 import { useMemo, useState } from 'react';
-import type { AttendanceCommitment, AuthUser, Contact, ContactGroup, CustomValue, ServiceType } from '../../types';
+import type {
+  AttendanceCommitment, AuthUser, Contact, ContactGroup, CustomValue, EstablishmentStage, ReferralStatus, ServiceType,
+} from '../../types';
 import { activeFields, cleanCustom } from '../../lib/customFields';
+import { ESTABLISHMENT_STAGES } from '../../lib/establishment';
+import { DEFAULT_ZONE_ID } from '../../lib/scope';
 import { store } from '../../lib/store';
 import { parsePhone } from '../../lib/phone';
 import { COMMITMENT_LABEL, SERVICE_OPTIONS, SPECIAL_EVENTS, fmtDate, todayIso } from '../../lib/services';
@@ -36,6 +40,15 @@ type FormState = {
   homeLocation: string;
   closestChurch: string;
   assignedTo: string;
+  zoneId: string;
+  doNotContact: boolean;
+  establishmentStage: EstablishmentStage;
+  believersClassAt: string;
+  baptismalClassAt: string;
+  wofbiAt: string;
+  establishedAt: string;
+  referralZoneId: string;
+  referralStatus: '' | ReferralStatus;
   bornAgain?: boolean;
   salvationDate: string;
   salvationPlace: string;
@@ -62,6 +75,15 @@ function initialForm(c?: Contact): FormState {
     homeLocation: c?.homeLocation ?? '',
     closestChurch: c?.closestChurch ?? '',
     assignedTo: c?.assignedTo ?? '',
+    zoneId: c?.zoneId ?? '',
+    doNotContact: c?.doNotContact ?? false,
+    establishmentStage: c?.establishmentStage ?? 'encounter',
+    believersClassAt: c?.believersClassAt ?? '',
+    baptismalClassAt: c?.baptismalClassAt ?? '',
+    wofbiAt: c?.wofbiAt ?? '',
+    establishedAt: c?.establishedAt ?? '',
+    referralZoneId: c?.referralZoneId ?? '',
+    referralStatus: c?.referralStatus ?? '',
     bornAgain: c?.bornAgain,
     salvationDate: c?.salvationDate ?? '',
     salvationPlace: c?.salvationPlace ?? '',
@@ -93,7 +115,10 @@ export default function ContactFormModal({
 }: Props) {
   const [form, setForm] = useState<FormState>(() => {
     const f = initialForm(contact);
-    if (!contact) f.assignedTo = user.id;
+    if (!contact) {
+      f.assignedTo = user.id;
+      f.zoneId = user.zoneId || DEFAULT_ZONE_ID;
+    }
     return f;
   });
   const [error, setError] = useState('');
@@ -107,6 +132,7 @@ export default function ContactFormModal({
   const [welcomeChannel, setWelcomeChannel] = useState<WelcomeChannel>('sms');
 
   const users = useMemo(() => store.getUsers(), []);
+  const zones = useMemo(() => store.getZones().filter((z) => z.active !== false), []);
   const allFields = useMemo(() => store.getFields(), []);
   const fields = activeFields(allFields);
 
@@ -181,6 +207,15 @@ export default function ContactFormModal({
       homeLocation: form.homeLocation.trim() || undefined,
       closestChurch: form.closestChurch.trim() || undefined,
       assignedTo: form.assignedTo || undefined,
+      zoneId: form.zoneId || user.zoneId || DEFAULT_ZONE_ID,
+      doNotContact: form.doNotContact,
+      establishmentStage: form.establishmentStage,
+      believersClassAt: form.believersClassAt || undefined,
+      baptismalClassAt: form.baptismalClassAt || undefined,
+      wofbiAt: form.wofbiAt || undefined,
+      establishedAt: form.establishedAt || undefined,
+      referralZoneId: form.referralZoneId || undefined,
+      referralStatus: form.referralZoneId ? (form.referralStatus || 'pending') : undefined,
       bornAgain: form.bornAgain,
       salvationDate: form.bornAgain ? form.salvationDate || undefined : undefined,
       salvationPlace: form.bornAgain ? form.salvationPlace.trim() || undefined : undefined,
@@ -312,6 +347,72 @@ export default function ContactFormModal({
               <p style={{ fontSize: '12.5px', color: 'var(--text-3)', marginTop: '6px' }}>
                 This worker will send the approved templates to this person. New records default to you.
               </p>
+              <div className="grid-2" style={{ marginTop: '12px' }}>
+                <div>
+                  <label className="label">Zone</label>
+                  <Select className="input" value={form.zoneId} onChange={(e) => set('zoneId', e.target.value)}>
+                    {zones.map((z) => (
+                      <option key={z.id} value={z.id}>{z.name} ({z.code})</option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <label className="label">Refer to another zone</label>
+                  <Select className="input" value={form.referralZoneId} onChange={(e) => set('referralZoneId', e.target.value)}>
+                    <option value="">No referral</option>
+                    {zones.filter((z) => z.id !== form.zoneId).map((z) => (
+                      <option key={z.id} value={z.id}>{z.name}</option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+              {form.referralZoneId && (
+                <div style={{ marginTop: '10px' }}>
+                  <label className="label">Referral status</label>
+                  <Select className="input" value={form.referralStatus} onChange={(e) => set('referralStatus', e.target.value as FormState['referralStatus'])}>
+                    <option value="pending">Pending handover</option>
+                    <option value="accepted">Accepted</option>
+                    <option value="declined">Declined</option>
+                  </Select>
+                </div>
+              )}
+              <label className="field-row" style={{ marginTop: '12px' }}>
+                <span>Do not contact (SMS / WhatsApp)</span>
+                <input type="checkbox" checked={form.doNotContact} onChange={(e) => set('doNotContact', e.target.checked)} />
+              </label>
+            </div>
+
+            <div className="form-section">
+              <p className="form-section-title">Establishment journey</p>
+              <p className="form-section-hint">Track progress from encounter through Believer’s class, baptismal class and WOFBI.</p>
+              <label className="label">Current stage</label>
+              <Select
+                className="input"
+                value={form.establishmentStage}
+                onChange={(e) => set('establishmentStage', e.target.value as EstablishmentStage)}
+              >
+                {ESTABLISHMENT_STAGES.map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
+                ))}
+              </Select>
+              <div className="grid-2" style={{ marginTop: '12px' }}>
+                <div>
+                  <label className="label">Believer’s class date</label>
+                  <input type="date" className="input" value={form.believersClassAt} onChange={(e) => set('believersClassAt', e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">Baptismal class date</label>
+                  <input type="date" className="input" value={form.baptismalClassAt} onChange={(e) => set('baptismalClassAt', e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">WOFBI date</label>
+                  <input type="date" className="input" value={form.wofbiAt} onChange={(e) => set('wofbiAt', e.target.value)} />
+                </div>
+                <div>
+                  <label className="label">Established date</label>
+                  <input type="date" className="input" value={form.establishedAt} onChange={(e) => set('establishedAt', e.target.value)} />
+                </div>
+              </div>
             </div>
 
             {/* ── Spiritual status ──────────────────────────────────────── */}

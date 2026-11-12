@@ -21,7 +21,11 @@ export default function UsersModule({ currentUser }: Props) {
   const [users, setUsers] = useState<AuthUser[]>(store.getUsers());
   const [open, setOpen] = useState(false);
   const allowedRoles = assignableRoles(currentUser);
-  const blankForm = { name: '', email: '', password: '', role: 'authorized' as UserRole };
+  const zones = store.getZones().filter((z) => z.active !== false);
+  const blankForm = {
+    name: '', email: '', password: '', role: 'authorized' as UserRole,
+    zoneId: currentUser.zoneId || zones[0]?.id || '',
+  };
   const [form, setForm] = useState(blankForm);
   const [error, setError] = useState('');
   const [created, setCreated] = useState<Credentials | null>(null);
@@ -53,7 +57,9 @@ export default function UsersModule({ currentUser }: Props) {
       return;
     }
     setBusy(true);
-    const res = await adminUsers('POST', { name: form.name.trim(), email: form.email.trim(), password: form.password, role: form.role });
+    const res = await adminUsers('POST', {
+      name: form.name.trim(), email: form.email.trim(), password: form.password, role: form.role, zoneId: form.zoneId || undefined,
+    });
     setBusy(false);
     if (!res.user) { setError(res.error ?? 'Could not add user'); return; }
     persist([...users, res.user]);
@@ -245,6 +251,13 @@ export default function UsersModule({ currentUser }: Props) {
                       As an Admin you can add Authorized users. Ask a Super Admin to add Admins.
                     </p>
                   )}
+                </div>
+                <div>
+                  <label className="label">Zone</label>
+                  <Select className="input" value={form.zoneId}
+                    onChange={(e) => setForm((f) => ({ ...f, zoneId: e.target.value }))}>
+                    {zones.map((z) => <option key={z.id} value={z.id}>{z.name} ({z.code})</option>)}
+                  </Select>
                 </div>
                 {error && <div className="alert alert-red">{error}</div>}
               </div>

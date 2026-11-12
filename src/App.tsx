@@ -18,6 +18,8 @@ import ReportsModule from './components/reports/ReportsModule';
 import ScheduleModule from './components/schedule/ScheduleModule';
 import UsersModule from './components/users/UsersModule';
 import ActivityModule from './components/activity/ActivityModule';
+import SupportModule from './components/support/SupportModule';
+import { visibleContacts } from './lib/scope';
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
@@ -91,8 +93,9 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
   }
 
   const history = visibleLogs(user, logs);
+  const scopedContacts = visibleContacts(user, contacts);
   const counts = {
-    contacts: contacts.length,
+    contacts: scopedContacts.filter((c) => !c.archived).length,
     messages: history.length,
     schedules: events.filter((e) => e.active).length,
   };
@@ -136,19 +139,22 @@ function PortalShell({ user, onLogout }: { user: AuthUser; onLogout: () => void 
           />
         )}
         {tab === 'messaging' && (
-          <MessagingModule user={user} contacts={contacts} groups={groups} logs={history} onLogsChange={setLogs} onContactsChange={setContacts} />
+          <MessagingModule user={user} contacts={scopedContacts} groups={groups} logs={history} onLogsChange={setLogs} onContactsChange={setContacts} />
         )}
         {tab === 'attendance' && (
           <AttendanceModule user={user} contacts={contacts} />
         )}
         {tab === 'reports' && canExportReports(user) && (
-          <ReportsModule contacts={contacts} />
+          <ReportsModule contacts={scopedContacts} />
         )}
         {tab === 'schedule' && (
-          <ScheduleModule user={user} events={events} contacts={contacts} groups={groups} onEventsChange={setEvents} />
+          <ScheduleModule user={user} events={events} contacts={scopedContacts} groups={groups} onEventsChange={setEvents} />
         )}
         {tab === 'users' && canManageUsers(user) && (
           <UsersModule currentUser={user} />
+        )}
+        {tab === 'support' && (
+          <SupportModule user={user} />
         )}
         {tab === 'activity' && canManageUsers(user) && (
           <ActivityModule />

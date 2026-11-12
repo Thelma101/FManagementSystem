@@ -32,9 +32,16 @@ const TABLES: Record<Exclude<CollectionKey, 'fp_users'>, TableSpec> = {
       'bornAgain', 'salvationDate',
       'salvationPlace', 'baptised', 'baptismDate', 'inCellFellowship', 'cellName', 'attendanceCommitment',
       'committedServices', 'committedSpecialEvent', 'welcomeSentAt', 'baptismPlace', 'custom', 'groupIds', 'assignedTo',
+      'zoneId', 'doNotContact', 'establishmentStage', 'believersClassAt', 'baptismalClassAt', 'wofbiAt', 'establishedAt',
+      'referralZoneId', 'referralStatus',
     ],
-    dates: ['addedAt', 'lastContacted', 'metDate', 'salvationDate', 'baptismDate', 'welcomeSentAt'],
-    defaults: { groupIds: [], tags: [], notes: '', archived: false },
+    dates: [
+      'addedAt', 'lastContacted', 'metDate', 'salvationDate', 'baptismDate', 'welcomeSentAt',
+      'believersClassAt', 'baptismalClassAt', 'wofbiAt', 'establishedAt',
+    ],
+    defaults: {
+      groupIds: [], tags: [], notes: '', archived: false, doNotContact: false, establishmentStage: 'encounter',
+    },
     order: 'added_at',
   },
   fp_attendance: {
@@ -89,6 +96,21 @@ const TABLES: Record<Exclude<CollectionKey, 'fp_users'>, TableSpec> = {
     order: 'position',
     ascending: true,
   },
+  fp_zones: {
+    table: 'zones',
+    columns: ['id', 'code', 'name', 'country', 'state', 'active', 'createdAt'],
+    dates: ['createdAt'],
+    defaults: { country: 'Nigeria', state: '', active: true },
+    order: 'name',
+    ascending: true,
+  },
+  fp_support: {
+    table: 'support_directory',
+    columns: ['id', 'roleKey', 'label', 'name', 'email', 'phone', 'sortOrder'],
+    defaults: { name: '', email: '', phone: '', sortOrder: 0 },
+    order: 'sort_order',
+    ascending: true,
+  },
 };
 
 const snake = (k: string) => k.replace(/[A-Z]/g, (c) => '_' + c.toLowerCase());
@@ -121,6 +143,7 @@ interface ProfileRow {
   email: string;
   role: UserRole;
   must_change_password: boolean;
+  zone_id: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -132,6 +155,7 @@ function profileToUser(p: ProfileRow): AuthUser {
     email: p.email,
     role: p.role,
     mustChangePassword: p.must_change_password,
+    zoneId: p.zone_id ?? undefined,
     createdBy: p.created_by ?? undefined,
     createdAt: p.created_at,
   };
@@ -163,17 +187,50 @@ async function fetchAll(table: string, order: string, ascending = false): Promis
 
 let lastLoadedAt = 0;
 
+async function fetchAllOptional(table: string, order: string, ascending = false): Promise<Row[]> {
+  try {
+    return await fetchAll(table, order, ascending);
+  } catch (err) {
+    console.warn(`Table ${table} not loaded (run migration 0010 if missing):`, err);
+    return [];
+  }
+}
+
+const OPTIONAL_TABLES = new Set(['zones', 'support_directory']);
+
 /** Loads every table into the store and switches the store to cloud mode. */
 export async function loadAll(): Promise<void> {
   const keys = Object.keys(TABLES) as (keyof typeof TABLES)[];
   const [profiles, ...tables] = await Promise.all([
     fetchAll('profiles', 'created_at', true),
-    ...keys.map((k) => fetchAll(TABLES[k].table, TABLES[k].order, TABLES[k].ascending)),
+    ...keys.map((k) => {
+      const spec = TABLES[k];
+      return OPTIONAL_TABLES.has(spec.table)
+        ? fetchAllOptional(spec.table, spec.order, spec.ascending)
+        : fetchAll(spec.table, spec.order, spec.ascending);
+    }),
   ]);
   const data: Partial<Record<CollectionKey, unknown[]>> = {
     fp_users: (profiles as unknown as ProfileRow[]).map(profileToUser),
   };
   keys.forEach((k, i) => { data[k] = tables[i].map((r) => fromRow(TABLES[k], r)); });
+
+  // Seed pilot zones in-memory when DB table is empty / not migrated yet.
+  if (!data.fp_zones?.length) {
+    data.fp_zones = [
+      { id: 'zone-lekki-osapa', code: 'LG-OSAPA', name: 'Lekki Osapa Zone', country: 'Nigeria', state: 'Lagos', active: true },
+      { id: 'zone-surulere', code: 'LG-SURU', name: 'Surulere Zone', country: 'Nigeria', state: 'Lagos', active: true },
+    ];
+  }
+  if (!data.fp_support?.length) {
+    data.fp_support = [
+      { id: 'sup-zone-admin', roleKey: 'zone_admin', label: 'Zone Administrator', name: '', email: '', phone: '', sortOrder: 10 },
+      { id: 'sup-tech', roleKey: 'tech', label: 'Technical Support', name: '', email: '', phone: '', sortOrder: 20 },
+      { id: 'sup-privacy', roleKey: 'privacy', label: 'Privacy / removal requests', name: '', email: '', phone: '', sortOrder: 30 },
+      { id: 'sup-national', roleKey: 'national', label: 'National coordination', name: '', email: '', phone: '', sortOrder: 40 },
+    ];
+  }
+
   store.attachCloud(data as Record<CollectionKey, unknown[]>, queueSync);
   lastLoadedAt = Date.now();
 }
@@ -200,6 +257,11 @@ function chunk<T>(list: T[], size: number): T[][] {
 async function writeDiff(key: CollectionKey, prev: unknown[], next: unknown[]) {
   if (key === 'fp_users') return; // accounts are managed by the server
   const spec = TABLES[key];
+  // Don't push seed-only zone/support rows until migration 0010 exists.
+  if (OPTIONAL_TABLES.has(spec.table)) {
+    const probe = await client().from(spec.table).select('id').limit(1);
+    if (probe.error) return;
+  }
   const before = new Map((prev as Row[]).map((r) => [r.id as string, JSON.stringify(r)]));
   const nextIds = new Set((next as Row[]).map((r) => r.id as string));
 

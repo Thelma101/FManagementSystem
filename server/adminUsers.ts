@@ -34,6 +34,7 @@ interface ProfileRow {
   email: string;
   role: UserRole;
   must_change_password: boolean;
+  zone_id?: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -47,6 +48,7 @@ function toUser(p: ProfileRow): AuthUser {
     email: p.email,
     role: p.role,
     mustChangePassword: p.must_change_password,
+    zoneId: p.zone_id ?? undefined,
     createdBy: p.created_by ?? undefined,
     createdAt: p.created_at,
   };
@@ -81,6 +83,7 @@ export async function handleAdminUsers(
     const email = String(body.email ?? '').trim().toLowerCase();
     const password = String(body.password ?? '');
     const role = body.role as UserRole;
+    const zoneId = String(body.zoneId ?? actor.zoneId ?? '').trim() || null;
     if (!name || !email) return fail(400, 'Name and email are required');
     const tooShort = passwordError(password);
     if (tooShort) return fail(400, `Temporary password: ${tooShort.toLowerCase()}`);
@@ -99,7 +102,10 @@ export async function handleAdminUsers(
 
     const { data: row, error: profileError } = await admin
       .from('profiles')
-      .insert({ id: created.user.id, name, email, role, must_change_password: true, created_by: actor.name })
+      .insert({
+        id: created.user.id, name, email, role, must_change_password: true, created_by: actor.name,
+        ...(zoneId ? { zone_id: zoneId } : {}),
+      })
       .select('*')
       .single<ProfileRow>();
     if (profileError || !row) {

@@ -13,6 +13,8 @@ import {
   scrubMessageLog,
 } from '../../lib/privacy';
 import { activeFields } from '../../lib/customFields';
+import { stageLabel } from '../../lib/establishment';
+import { visibleContacts, zoneLabel } from '../../lib/scope';
 import { fmtDate, serviceLabel } from '../../lib/services';
 import { fillWelcome, type WelcomeOptions } from '../../lib/welcome';
 import { MESSAGE_TEMPLATES, fillName } from '../../lib/messageTemplates';
@@ -161,9 +163,7 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
   const active = contacts.filter((c) => !c.archived);
   const archived = contacts.filter((c) => c.archived);
   const pool = showArchived ? archived : active;
-  const scoped = canSeeFullPhones(user)
-    ? pool
-    : pool.filter((c) => c.assignedTo === user.id || c.addedBy === user.id);
+  const scoped = visibleContacts(user, pool);
   const tagOptions = useMemo(
     () => [...new Set([...TAG_OPTIONS, ...contacts.flatMap((c) => c.tags)])].sort(),
     [contacts],
@@ -171,6 +171,7 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
   const groupName = useMemo(() => new Map(groups.map((g) => [g.id, g.name])), [groups]);
   const staff = useMemo(() => store.getUsers(), []);
   const staffName = useMemo(() => new Map(staff.map((u) => [u.id, u.name])), [staff]);
+  const zones = useMemo(() => store.getZones(), []);
 
   const filtered = scoped.filter((c) => {
     const q = search.toLowerCase();
@@ -422,6 +423,14 @@ export default function ContactsModule({ user, contacts, groups, onContactsChang
                             Follow-up: {staffName.get(c.assignedTo) ?? 'staff'}
                           </p>
                         )}
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                          {c.zoneId && <span className="badge badge-navy" style={{ fontSize: '10.5px' }}>{zoneLabel(zones, c.zoneId)}</span>}
+                          <span className="badge badge-gold" style={{ fontSize: '10.5px' }}>{stageLabel(c.establishmentStage)}</span>
+                          {c.doNotContact && <span className="badge badge-red" style={{ fontSize: '10.5px' }}>Do not contact</span>}
+                          {c.referralZoneId && c.referralStatus === 'pending' && (
+                            <span className="badge badge-amber" style={{ fontSize: '10.5px' }}>Referral pending</span>
+                          )}
+                        </div>
                         {c.groupIds?.some((g) => groupName.has(g)) && (
                           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '3px', marginTop: '3px' }}>
                             {c.groupIds.filter((g) => groupName.has(g)).map((g) => (

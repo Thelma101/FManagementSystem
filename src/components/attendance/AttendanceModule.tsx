@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { AttendanceRecord, AuthUser, Contact, ServiceType } from '../../types';
 import { store } from '../../lib/store';
+import { attendanceContacts } from '../../lib/scope';
 import { SERVICE_OPTIONS, SPECIAL_EVENTS, addWeeks, fmtWeekRange, weekStartOf } from '../../lib/services';
 import { useToast } from '../ui/Toast';
 import Select from '../ui/Select';
@@ -40,7 +41,7 @@ export default function AttendanceModule({ user, contacts }: Props) {
   const [otherOpen, setOtherOpen] = useState(false);
   const [customEvent, setCustomEvent] = useState('');
 
-  const activeContacts = contacts.filter((c) => !c.archived);
+  const activeContacts = attendanceContacts(user, contacts);
   const visible = activeContacts.filter((c) => {
     const q = search.toLowerCase();
     if (q && !c.name.toLowerCase().includes(q)) return false;

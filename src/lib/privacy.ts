@@ -35,7 +35,13 @@ export function displayPhone(user: AuthUser, contact: Pick<Contact, 'name' | 'ph
 }
 
 export function canMessageContact(user: AuthUser, contact: Contact): boolean {
-  if (contact.archived || isErasedContact(contact)) return false;
+  if (contact.archived || isErasedContact(contact) || contact.doNotContact) return false;
+  if (user.role !== 'superadmin' && user.zoneId && contact.zoneId && contact.zoneId !== user.zoneId) {
+    const referralOk =
+      contact.referralZoneId === user.zoneId &&
+      (contact.referralStatus === 'pending' || contact.referralStatus === 'accepted');
+    if (!referralOk) return false;
+  }
   return canSeeFullPhones(user) || contact.assignedTo === user.id || contact.addedBy === user.id;
 }
 
@@ -62,6 +68,14 @@ export function erasedContactPatch(contact: Contact): Contact {
     homeLocation: '',
     closestChurch: '',
     assignedTo: undefined,
+    doNotContact: true,
+    establishmentStage: 'encounter',
+    believersClassAt: undefined,
+    baptismalClassAt: undefined,
+    wofbiAt: undefined,
+    establishedAt: undefined,
+    referralZoneId: undefined,
+    referralStatus: undefined,
     bornAgain: undefined,
     salvationDate: undefined,
     salvationPlace: undefined,

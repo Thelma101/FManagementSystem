@@ -1,5 +1,35 @@
 export type UserRole = 'superadmin' | 'admin' | 'authorized';
 
+export interface Zone {
+  id: string;
+  code: string;
+  name: string;
+  country: string;
+  state: string;
+  active?: boolean;
+  createdAt?: string;
+}
+
+export type EstablishmentStage =
+  | 'encounter'
+  | 'follow_up'
+  | 'believers_class'
+  | 'baptismal_class'
+  | 'wofbi'
+  | 'established';
+
+export type ReferralStatus = 'pending' | 'accepted' | 'declined';
+
+export interface SupportEntry {
+  id: string;
+  roleKey: string;
+  label: string;
+  name: string;
+  email: string;
+  phone: string;
+  sortOrder: number;
+}
+
 export interface AuthUser {
   id: string;
   name: string;
@@ -7,6 +37,8 @@ export interface AuthUser {
   role: UserRole;
   /** Temporary password must be replaced at next sign-in. */
   mustChangePassword?: boolean;
+  /** Home zone for admins/workers (Super Admin may be unset = all zones). */
+  zoneId?: string;
   createdBy?: string;
   createdAt?: string;
 }
@@ -37,6 +69,19 @@ export interface Contact {
   closestChurch?: string;
   /** Staff user who follows this soul up (sends templates to them). */
   assignedTo?: string;
+  /** Responsible zone (Country → State → Zone directory). */
+  zoneId?: string;
+  /** Opt out of SMS / WhatsApp outreach. */
+  doNotContact?: boolean;
+  /** Journey stage toward establishment. */
+  establishmentStage?: EstablishmentStage;
+  believersClassAt?: string;
+  baptismalClassAt?: string;
+  wofbiAt?: string;
+  establishedAt?: string;
+  /** Cross-zone handover target. */
+  referralZoneId?: string;
+  referralStatus?: ReferralStatus;
 
   // Spiritual status
   bornAgain?: boolean;
@@ -175,4 +220,4 @@ export interface AppState {
   activeTab: Tab;
 }
 
-export type Tab = 'dashboard' | 'contacts' | 'messaging' | 'attendance' | 'reports' | 'schedule' | 'users' | 'activity';
+export type Tab = 'dashboard' | 'contacts' | 'messaging' | 'attendance' | 'reports' | 'schedule' | 'users' | 'activity' | 'support';
